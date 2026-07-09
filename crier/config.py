@@ -5,8 +5,8 @@ import sys
 from pathlib import Path
 
 APP_NAME = "Crier"
-ORG_NAME = "xtraorange"
-REPO = "xtraorange/crier"                      # for the self-updater
+ORG_NAME = "MedrioJames"
+REPO = "MedrioJames/crier"                      # for the self-updater
 
 # Kokoro model assets. These are downloaded on first run so the installer stays small.
 # If these URLs ever move, change them here (or point them at your own mirror).

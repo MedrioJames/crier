@@ -65,7 +65,7 @@ class App(QObject):
         self.popup.volume_changed.connect(self.on_volume)
         self.popup.speed_changed.connect(self.on_speed)
 
-        self.player.finished.connect(lambda: self.popup.set_playing(False))
+        self.player.finished.connect(self._on_playback_finished)
 
         self.sig_status.connect(self.tray.tray.setToolTip)
         self.sig_ready.connect(self.popup.set_playing)
@@ -133,6 +133,12 @@ class App(QObject):
 
     def on_stop(self):
         self.player.stop()
+        self.popup.set_playing(False)
+
+    def _on_playback_finished(self):
+        # player.finished is emitted from the PortAudio callback thread; this
+        # slot is a bound method of a QObject (App) so Qt queues it onto the
+        # GUI thread instead of touching popup widgets from the audio thread.
         self.popup.set_playing(False)
 
     def on_volume(self, vol: float):

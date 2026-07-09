@@ -3,7 +3,7 @@
 ; Expects PyInstaller output in dist\Crier\  (run pyinstaller build\crier.spec first).
 
 #define MyAppName "Crier"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "1.0.0"
 #define MyAppPublisher "MedrioJames"
 #define MyAppExeName "Crier.exe"
 #define MyAppURL "https://github.com/MedrioJames/crier"

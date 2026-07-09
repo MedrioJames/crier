@@ -4,7 +4,8 @@
 import os
 
 block_cipher = None
-ICON = os.path.join("crier", "resources", "crier.ico")
+SPECDIR = os.path.dirname(os.path.abspath(SPEC))
+ICON = os.path.join(SPECDIR, "..", "crier", "resources", "crier.ico")
 
 a = Analysis(
     ["../crier/__main__.py"],

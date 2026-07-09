@@ -69,6 +69,8 @@ class App(QObject):
         self.popup.stop.connect(self.on_stop)
         self.popup.reread.connect(self._resynth_current)
         self.popup.read_selection.connect(self.on_read)
+        self.popup.open_settings.connect(self.open_settings)
+        self.popup.quit_app.connect(self.quit)
         self.popup.volume_changed.connect(self.on_volume)
         self.popup.speed_changed.connect(self.on_speed)
 
@@ -79,7 +81,7 @@ class App(QObject):
         self.sig_status.connect(self.tray.tray.setToolTip, Qt.QueuedConnection)
         self.sig_status.connect(self.popup.set_status, Qt.QueuedConnection)
         self.sig_ready.connect(self.popup.set_playing, Qt.QueuedConnection)
-        self.sig_show_popup.connect(self.popup.show_near_cursor, Qt.QueuedConnection)
+        self.sig_show_popup.connect(self.popup.show_popup, Qt.QueuedConnection)
 
     def start(self):
         self.tray.show()
@@ -95,7 +97,7 @@ class App(QObject):
         # (popup already has focus) need this to grab the right selection.
         self._remember_foreground()
         if self._busy:
-            self.popup.show_near_cursor()
+            self.popup.show_popup()
             return
         self._busy = True
         threading.Thread(target=self._read_worker, daemon=True).start()
@@ -182,7 +184,7 @@ class App(QObject):
     # ---------- tray actions ----------
     def show_controls(self):
         self._remember_foreground()
-        self.popup.show_near_cursor()
+        self.popup.show_popup()
 
     def open_settings(self):
         # The global hotkeys are a system-wide hook independent of Qt focus,

@@ -1,4 +1,5 @@
-"""Frameless quick-controls popup shown at the cursor when the hotkey fires."""
+"""Frameless quick-controls popup, docked in a screen corner by default and
+freely movable by dragging its handle."""
 
 from PySide6.QtCore import Qt, Signal, QPoint
 from PySide6.QtGui import QCursor, QGuiApplication
@@ -9,11 +10,40 @@ from PySide6.QtWidgets import (
 from .hotkey_capture import pretty_hotkey
 
 
+class _DragHandle(QLabel):
+    """A small grip bar; dragging it moves the popup (its child buttons/
+    sliders would otherwise eat every mouse press before it reached them)."""
+
+    def __init__(self, popup):
+        super().__init__("⠷⠷  Crier")
+        self._popup = popup
+        self._offset = None
+        self.setObjectName("handle")
+        self.setCursor(Qt.SizeAllCursor)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._offset = event.globalPosition().toPoint() - self._popup.frameGeometry().topLeft()
+            event.accept()
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() & Qt.LeftButton and self._offset is not None:
+            self._popup.move(event.globalPosition().toPoint() - self._offset)
+            self._popup.mark_user_moved()
+            event.accept()
+
+    def mouseReleaseEvent(self, event):
+        self._offset = None
+        event.accept()
+
+
 class ControlPopup(QWidget):
     play_pause = Signal()
     stop = Signal()
     reread = Signal()
     read_selection = Signal()
+    open_settings = Signal()
+    quit_app = Signal()
     speed_changed = Signal(float)     # 0.5 .. 2.0
     volume_changed = Signal(float)    # 0.0 .. 1.0
 
@@ -24,6 +54,7 @@ class ControlPopup(QWidget):
         )
         self.setAttribute(Qt.WA_TranslucentBackground, False)
         self.setWindowTitle("Crier")
+        self._user_moved = False
 
         card = QFrame(self)
         card.setObjectName("card")
@@ -32,8 +63,11 @@ class ControlPopup(QWidget):
         outer.addWidget(card)
 
         root = QVBoxLayout(card)
-        root.setContentsMargins(12, 10, 12, 10)
+        root.setContentsMargins(12, 8, 12, 10)
         root.setSpacing(8)
+
+        self.drag_handle = _DragHandle(self)
+        root.addWidget(self.drag_handle)
 
         # Primary action
         self.btn_read = QPushButton("Read Selection")
@@ -51,11 +85,20 @@ class ControlPopup(QWidget):
         self.btn_play = QPushButton("Pause")
         self.btn_stop = QPushButton("Stop")
         self.btn_reread = QPushButton("Re-read")
-        self.btn_hide = QPushButton("Hide")
-        for b in (self.btn_play, self.btn_stop, self.btn_reread, self.btn_hide):
+        for b in (self.btn_play, self.btn_stop, self.btn_reread):
             b.setCursor(Qt.PointingHandCursor)
             row.addWidget(b)
         root.addLayout(row)
+
+        # Settings / Hide / Quit row
+        row2 = QHBoxLayout()
+        self.btn_settings = QPushButton("Settings")
+        self.btn_hide = QPushButton("Hide")
+        self.btn_quit = QPushButton("Quit")
+        for b in (self.btn_settings, self.btn_hide, self.btn_quit):
+            b.setCursor(Qt.PointingHandCursor)
+            row2.addWidget(b)
+        root.addLayout(row2)
 
         # Speed
         root.addWidget(QLabel("Speed"))
@@ -84,7 +127,9 @@ class ControlPopup(QWidget):
         self.btn_play.clicked.connect(self.play_pause.emit)
         self.btn_stop.clicked.connect(self.stop.emit)
         self.btn_reread.clicked.connect(self.reread.emit)
+        self.btn_settings.clicked.connect(self.open_settings.emit)
         self.btn_hide.clicked.connect(self.hide)
+        self.btn_quit.clicked.connect(self.quit_app.emit)
         self.speed.valueChanged.connect(self._on_speed)
         self.volume.valueChanged.connect(self._on_volume)
 
@@ -93,6 +138,10 @@ class ControlPopup(QWidget):
             #card { background: #1f2330; border: 1px solid #3a4054; border-radius: 12px; }
             QLabel { color: #c8cede; font-size: 12px; }
             QLabel#status { color: #9aa3b8; font-size: 11px; }
+            QLabel#handle {
+                color: #6a7286; font-size: 11px; letter-spacing: 1px;
+                padding: 2px 0 4px 0;
+            }
             QPushButton {
                 background: #2c3244; color: #e8ecf6; border: 1px solid #3a4054;
                 border-radius: 8px; padding: 6px 10px; font-size: 12px;
@@ -118,6 +167,9 @@ class ControlPopup(QWidget):
         self.btn_read.setText(f"Read Selection ({pretty})" if pretty else "Read Selection")
         self.btn_read.setToolTip(f"Same as pressing {pretty}" if pretty else "")
 
+    def mark_user_moved(self):
+        self._user_moved = True
+
     def _on_speed(self, val):
         self.speed_label.setText(f"{val / 100:.2f}x")
         self.speed_changed.emit(val / 100.0)
@@ -126,14 +178,22 @@ class ControlPopup(QWidget):
         self.volume_label.setText(f"{val}%")
         self.volume_changed.emit(val / 100.0)
 
-    def show_near_cursor(self):
+    def show_popup(self):
+        """Show the popup - docked in a screen corner the first time (and
+        any time after the user hasn't dragged it), otherwise wherever the
+        user last left it."""
+        if not self._user_moved:
+            self._dock_in_corner()
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
+    def _dock_in_corner(self):
         self.adjustSize()
         pos = QCursor.pos()
         screen = QGuiApplication.screenAt(pos) or QGuiApplication.primaryScreen()
         geo = screen.availableGeometry()
-        x = min(pos.x() + 12, geo.right() - self.width() - 8)
-        y = min(pos.y() + 12, geo.bottom() - self.height() - 8)
-        self.move(QPoint(max(geo.left() + 8, x), max(geo.top() + 8, y)))
-        self.show()
-        self.raise_()
-        self.activateWindow()
+        margin = 16
+        x = geo.right() - self.width() - margin
+        y = geo.bottom() - self.height() - margin
+        self.move(QPoint(x, y))

@@ -10,7 +10,7 @@ import subprocess
 import sys
 import threading
 
-from PySide6.QtCore import QObject, Signal, QProcess
+from PySide6.QtCore import QObject, Signal, QProcess, Qt
 from PySide6.QtWidgets import QMessageBox
 
 REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -53,7 +53,8 @@ class Updater(QObject):
         super().__init__()
         self._parent = parent_widget
         self._worker = _CheckWorker()
-        self._worker.result.connect(self._on_result)
+        # Explicit QueuedConnection: emitted from the check-worker thread.
+        self._worker.result.connect(self._on_result, Qt.QueuedConnection)
         self._silent = True
 
     def check(self, silent: bool = True):

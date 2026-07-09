@@ -1,21 +1,24 @@
 """Download the Kokoro model + voices on first run, with a progress dialog."""
 
 import requests
-from PySide6.QtCore import QObject, QThread, Signal, Qt
+from PySide6.QtCore import QThread, Signal, Qt
 from PySide6.QtWidgets import QProgressDialog, QMessageBox
 
 from . import config
 
 
-class _Worker(QObject):
+class _DownloadThread(QThread):
     progress = Signal(int, int)      # bytes_done, bytes_total (per file, summed)
     done = Signal(bool, str)         # ok, error_message
 
-    def __init__(self, jobs):
-        super().__init__()
+    def __init__(self, jobs, parent=None):
+        super().__init__(parent)
         self._jobs = jobs            # list of (url, dest_path)
 
     def run(self):
+        # Overriding run() directly (rather than moveToThread + a started/quit
+        # dance) means this thread's entry point IS the download - no event
+        # loop, no started()/quit() race to lose a too-early quit() in.
         try:
             # First, sum content lengths so the bar is meaningful.
             total = 0
@@ -59,9 +62,7 @@ def ensure_models(parent=None) -> bool:
     dlg.setAutoReset(False)
 
     result = {"ok": False, "err": ""}
-    worker = _Worker(jobs)
-    thread = QThread(parent)
-    worker.moveToThread(thread)
+    thread = _DownloadThread(jobs, parent)
 
     def on_progress(d, t):
         dlg.setValue(int(d * 100 / t))
@@ -69,15 +70,21 @@ def ensure_models(parent=None) -> bool:
     def on_done(ok, err):
         result["ok"] = ok
         result["err"] = err
-        thread.quit()
-        dlg.reset()
+        # reset() only clears progress state; with autoClose disabled it does
+        # NOT hide the dialog or end dlg.exec()'s modal loop. close() does
+        # (it triggers reject() -> done()), which is what actually lets
+        # ensure_models() proceed once the download finishes.
+        dlg.close()
 
-    worker.progress.connect(on_progress)
-    worker.done.connect(on_done)
-    thread.started.connect(worker.run)
+    # Plain closures (not bound QObject methods) don't carry thread-affinity
+    # info Qt can use for AutoConnection, so force queuing onto the GUI
+    # thread explicitly - otherwise these can run on the download thread and
+    # touch dlg (a GUI widget) unsafely.
+    thread.progress.connect(on_progress, Qt.QueuedConnection)
+    thread.done.connect(on_done, Qt.QueuedConnection)
 
     thread.start()
-    dlg.exec()  # modal; returns when reset() is called or user cancels
+    dlg.exec()  # modal; returns when on_done() closes it or the user cancels
     thread.wait()
 
     if not result["ok"]:

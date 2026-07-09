@@ -51,8 +51,9 @@ class App(QObject):
 
     # ---------- wiring ----------
     def _connect(self):
-        self.hotkeys.read_triggered.connect(self.on_read)
-        self.hotkeys.stop_triggered.connect(self.on_stop)
+        # Explicit QueuedConnection: hotkeys fire from pynput's own thread.
+        self.hotkeys.read_triggered.connect(self.on_read, Qt.QueuedConnection)
+        self.hotkeys.stop_triggered.connect(self.on_stop, Qt.QueuedConnection)
 
         self.tray.show_controls.connect(self.show_controls)
         self.tray.open_settings.connect(self.open_settings)
@@ -65,10 +66,12 @@ class App(QObject):
         self.popup.volume_changed.connect(self.on_volume)
         self.popup.speed_changed.connect(self.on_speed)
 
-        self.player.finished.connect(self._on_playback_finished)
+        # Explicit QueuedConnection: these three all cross from a worker
+        # thread (PortAudio callback / synth threads) onto the GUI thread.
+        self.player.finished.connect(self._on_playback_finished, Qt.QueuedConnection)
 
-        self.sig_status.connect(self.tray.tray.setToolTip)
-        self.sig_ready.connect(self.popup.set_playing)
+        self.sig_status.connect(self.tray.tray.setToolTip, Qt.QueuedConnection)
+        self.sig_ready.connect(self.popup.set_playing, Qt.QueuedConnection)
 
     def start(self):
         self.tray.show()

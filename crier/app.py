@@ -185,6 +185,11 @@ class App(QObject):
         self.popup.show_near_cursor()
 
     def open_settings(self):
+        # The global hotkeys are a system-wide hook independent of Qt focus,
+        # so capturing a new combo in the dialog (e.g. re-pressing the
+        # current one) would also fire the live action underneath it unless
+        # we pause listening for the whole dialog session.
+        self.hotkeys.stop()
         dlg = SettingsDialog(self.settings, self.popup)
         if dlg.exec():
             old_gpu = self.settings.use_gpu
@@ -194,6 +199,8 @@ class App(QObject):
             set_autostart(self.settings.autostart)
             if self.settings.use_gpu != old_gpu:
                 self.engine = Engine(use_gpu=self.settings.use_gpu)   # lazy reload
+        else:
+            self.hotkeys.start()  # nothing changed - restore the still-current hotkeys
 
     def quit(self):
         self.hotkeys.stop()

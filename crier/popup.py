@@ -12,8 +12,9 @@ from .seek_slider import SeekSlider
 
 
 class _DragHandle(QLabel):
-    """A small grip bar; dragging it moves the popup (its child buttons/
-    sliders would otherwise eat every mouse press before it reached them)."""
+    """The draggable part of the title bar; dragging it moves the popup
+    (its sibling icon buttons get normal clicks - Qt only routes mouse
+    events here when the pointer is actually over this label)."""
 
     def __init__(self, popup):
         super().__init__("⠷⠷  Crier")
@@ -69,8 +70,22 @@ class ControlPopup(QWidget):
         root.setContentsMargins(12, 8, 12, 10)
         root.setSpacing(8)
 
+        titlebar = QHBoxLayout()
+        titlebar.setSpacing(2)
         self.drag_handle = _DragHandle(self)
-        root.addWidget(self.drag_handle)
+        titlebar.addWidget(self.drag_handle, 1)
+        self.btn_settings = QPushButton("⚙")
+        self.btn_hide = QPushButton("–")
+        self.btn_quit = QPushButton("✕")
+        for b, tip in (
+            (self.btn_settings, "Settings"), (self.btn_hide, "Hide"), (self.btn_quit, "Quit"),
+        ):
+            b.setCursor(Qt.PointingHandCursor)
+            b.setObjectName("titleBtn")
+            b.setFixedSize(24, 22)
+            b.setToolTip(tip)
+            titlebar.addWidget(b)
+        root.addLayout(titlebar)
 
         # Primary actions
         self.btn_read = QPushButton("Read Selection")
@@ -108,16 +123,6 @@ class ControlPopup(QWidget):
         self.seek = SeekSlider()
         root.addWidget(self.seek)
 
-        # Settings / Hide / Quit row
-        row2 = QHBoxLayout()
-        self.btn_settings = QPushButton("Settings")
-        self.btn_hide = QPushButton("Hide")
-        self.btn_quit = QPushButton("Quit")
-        for b in (self.btn_settings, self.btn_hide, self.btn_quit):
-            b.setCursor(Qt.PointingHandCursor)
-            row2.addWidget(b)
-        root.addLayout(row2)
-
         # Speed
         root.addWidget(QLabel("Speed"))
         self.speed = QSlider(Qt.Horizontal)
@@ -153,6 +158,12 @@ class ControlPopup(QWidget):
         self.speed.valueChanged.connect(self._on_speed)
         self.volume.valueChanged.connect(self._on_volume)
 
+        # Click-toolbar buttons, not tab-focusable form controls - without
+        # this Qt draws a lingering focus rectangle around whichever one
+        # was clicked last (the "blue box" around e.g. Stop after using it).
+        for b in self.findChildren(QPushButton):
+            b.setFocusPolicy(Qt.NoFocus)
+
         self.setStyleSheet(
             """
             #card { background: #1f2330; border: 1px solid #3a4054; border-radius: 12px; }
@@ -172,6 +183,11 @@ class ControlPopup(QWidget):
             QPushButton#grabBtn { background: #2f5c4a; border-color: #3f7a61; }
             QPushButton#grabBtn:hover { background: #386f59; }
             QPushButton#iconBtn { font-size: 15px; padding: 0px; }
+            QPushButton#titleBtn {
+                background: transparent; border: none; color: #7d859c;
+                font-size: 13px; border-radius: 5px; padding: 0px;
+            }
+            QPushButton#titleBtn:hover { background: #333a4f; color: #e8ecf6; }
             QLabel#time { color: #9aa3b8; font-size: 11px; }
             QSlider::groove:horizontal { height: 4px; background: #3a4054; border-radius: 2px; }
             QSlider::handle:horizontal { width: 14px; margin: -6px 0; border-radius: 7px; background: #6ea8fe; }

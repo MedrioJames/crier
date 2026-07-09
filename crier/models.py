@@ -1,9 +1,7 @@
 """Download the Kokoro model + voices on first run, with a progress dialog."""
 
-import threading
-
 import requests
-from PySide6.QtCore import QObject, Signal, Qt
+from PySide6.QtCore import QObject, QThread, Signal, Qt
 from PySide6.QtWidgets import QProgressDialog, QMessageBox
 
 from . import config
@@ -62,6 +60,8 @@ def ensure_models(parent=None) -> bool:
 
     result = {"ok": False, "err": ""}
     worker = _Worker(jobs)
+    thread = QThread(parent)
+    worker.moveToThread(thread)
 
     def on_progress(d, t):
         dlg.setValue(int(d * 100 / t))
@@ -69,14 +69,16 @@ def ensure_models(parent=None) -> bool:
     def on_done(ok, err):
         result["ok"] = ok
         result["err"] = err
+        thread.quit()
         dlg.reset()
 
     worker.progress.connect(on_progress)
     worker.done.connect(on_done)
+    thread.started.connect(worker.run)
 
-    t = threading.Thread(target=worker.run, daemon=True)
-    t.start()
+    thread.start()
     dlg.exec()  # modal; returns when reset() is called or user cancels
+    thread.wait()
 
     if not result["ok"]:
         # Clean up any partial files so a retry starts fresh.

@@ -1,0 +1,13 @@
+# Runtime dependencies. Use Python 3.10-3.12 (Kokoro's deps have no 3.13 wheels yet).
+PySide6>=6.6
+kokoro-onnx>=0.4.0
+onnxruntime>=1.17            # for the experimental iGPU path, swap for: onnxruntime-directml
+sounddevice>=0.4.6
+numpy>=1.24,<2.0
+pyperclip>=1.8
+pynput>=1.7
+requests>=2.31
+
+# Build-time only:
+#   pyinstaller>=6.3
+#   pillow>=10        (only to regenerate the icon via build/make_icon.py)

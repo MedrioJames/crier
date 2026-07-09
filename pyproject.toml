@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "crier-tts"
+version = "0.1.0"
+description = "Read selected text aloud anywhere, in a natural local voice."
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+license = { text = "MIT" }
+authors = [{ name = "xtraorange" }]
+dependencies = [
+    "PySide6>=6.6",
+    "kokoro-onnx>=0.4.0",
+    "onnxruntime>=1.17",
+    "sounddevice>=0.4.6",
+    "numpy>=1.24,<2.0",
+    "pyperclip>=1.8",
+    "pynput>=1.7",
+    "requests>=2.31",
+]
+
+[project.urls]
+Homepage = "https://github.com/xtraorange/crier"
+
+[project.gui-scripts]
+crier = "crier.app:main"
+
+[tool.setuptools]
+packages = ["crier"]
+
+[tool.setuptools.package-data]
+crier = ["resources/*"]

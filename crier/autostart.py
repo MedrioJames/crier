@@ -9,9 +9,8 @@ _RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 
 def _launch_command() -> str:
-    # Frozen (PyInstaller) -> the exe itself. Dev -> pythonw -m crier (no console window).
-    if getattr(sys, "frozen", False):
-        return f'"{sys.executable}"'
+    # pythonw.exe regardless of which interpreter is currently running, so the
+    # autostart entry never flashes a console window.
     pythonw = str(Path(sys.executable).with_name("pythonw.exe"))
     return f'"{pythonw}" -m crier'
 

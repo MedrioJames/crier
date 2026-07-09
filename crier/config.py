@@ -1,12 +1,10 @@
 """Paths, identifiers, and download URLs used across Crier."""
 
 import os
-import sys
 from pathlib import Path
 
 APP_NAME = "Crier"
 ORG_NAME = "MedrioJames"
-REPO = "MedrioJames/crier"                      # for the self-updater
 
 # Kokoro model assets. These are downloaded on first run so the installer stays small.
 # If these URLs ever move, change them here (or point them at your own mirror).
@@ -36,8 +34,8 @@ def model_paths():
 
 
 def resource_path(rel: str) -> str:
-    """Resolve a bundled resource in both dev and PyInstaller (onedir/onefile)."""
-    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    """Resolve a bundled resource relative to the repo root."""
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base, rel)
 
 

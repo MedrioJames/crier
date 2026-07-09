@@ -9,8 +9,6 @@ __pycache__/
 # Distribution / packaging
 .Python
 build/*
-!build/crier.spec
-!build/installer.iss
 !build/make_icon.py
 develop-eggs/
 dist/
@@ -34,7 +32,6 @@ MANIFEST
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
-!build/crier.spec
 
 # Installer logs
 pip-log.txt

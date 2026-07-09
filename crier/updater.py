@@ -1,45 +1,49 @@
-"""Check GitHub releases for a newer version and optionally run its installer."""
+"""Check the git remote for new commits and pull them in, then restart.
+
+Crier runs from a plain git checkout (no installer/frozen exe), so
+"updating" just means pulling origin/main and relaunching - no download,
+no unsigned installer for SmartScreen to block.
+"""
 
 import os
-import re
-import tempfile
+import subprocess
+import sys
 import threading
 
-import requests
 from PySide6.QtCore import QObject, Signal, QProcess
 from PySide6.QtWidgets import QMessageBox
 
-from . import config, __version__
+REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Suppress the console window git.exe would otherwise briefly flash on Windows.
+_NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 
-def _to_tuple(v: str):
-    nums = re.findall(r"\d+", v or "")
-    return tuple(int(n) for n in nums) if nums else (0,)
-
-
-def _is_newer(latest: str, current: str) -> bool:
-    return _to_tuple(latest) > _to_tuple(current)
+def _git(*args, timeout=30):
+    return subprocess.run(
+        ["git", *args], cwd=REPO_DIR, capture_output=True, text=True,
+        timeout=timeout, creationflags=_NO_WINDOW,
+    )
 
 
 class _CheckWorker(QObject):
-    result = Signal(bool, str, str)   # update_available, latest_tag, asset_url
+    result = Signal(bool, str)   # update_available, summary (short log or error)
 
     def run(self):
         try:
-            url = f"https://api.github.com/repos/{config.REPO}/releases/latest"
-            r = requests.get(url, timeout=15, headers={"Accept": "application/vnd.github+json"})
-            r.raise_for_status()
-            data = r.json()
-            tag = data.get("tag_name", "")
-            asset_url = ""
-            for asset in data.get("assets", []):
-                name = asset.get("name", "").lower()
-                if name.endswith(".exe"):        # the Inno Setup installer
-                    asset_url = asset.get("browser_download_url", "")
-                    break
-            self.result.emit(_is_newer(tag, __version__), tag, asset_url)
-        except Exception:
-            self.result.emit(False, "", "")
+            fetch = _git("fetch", "origin", "main")
+            if fetch.returncode != 0:
+                self.result.emit(False, fetch.stderr.strip())
+                return
+            local = _git("rev-parse", "HEAD").stdout.strip()
+            remote = _git("rev-parse", "origin/main").stdout.strip()
+            if not local or not remote or local == remote:
+                self.result.emit(False, "")
+                return
+            log = _git("log", "--oneline", f"{local}..{remote}").stdout.strip()
+            self.result.emit(True, log or remote[:7])
+        except Exception as e:
+            self.result.emit(False, f"{type(e).__name__}: {e}")
 
 
 class Updater(QObject):
@@ -56,36 +60,41 @@ class Updater(QObject):
         self._silent = silent
         threading.Thread(target=self._worker.run, daemon=True).start()
 
-    def _on_result(self, available: bool, tag: str, asset_url: str):
+    def _on_result(self, available: bool, summary: str):
         if not available:
             if not self._silent:
-                QMessageBox.information(self._parent, "Crier", "You're on the latest version.")
+                if summary:
+                    QMessageBox.warning(self._parent, "Crier", f"Couldn't check for updates:\n{summary}")
+                else:
+                    QMessageBox.information(self._parent, "Crier", "You're on the latest version.")
             return
         msg = QMessageBox(self._parent)
         msg.setWindowTitle("Crier - update available")
-        msg.setText(f"Crier {tag} is available (you have {__version__}).\nUpdate now?")
+        msg.setText(f"An update is available:\n\n{summary}\n\nPull it in and restart now?")
         msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         if msg.exec() != QMessageBox.Yes:
             return
-        if asset_url:
-            self._download_and_run(asset_url)
-        else:
-            # No installer asset on the release; open the releases page instead.
-            QProcess.startDetached("cmd", ["/c", "start", "",
-                                            f"https://github.com/{config.REPO}/releases/latest"])
+        self._pull_and_restart()
 
-    def _download_and_run(self, asset_url: str):
+    def _pull_and_restart(self):
+        pull = _git("pull", "--ff-only", "origin", "main", timeout=60)
+        if pull.returncode != 0:
+            QMessageBox.critical(self._parent, "Crier", f"Update failed:\n{pull.stderr}")
+            return
         try:
-            dest = os.path.join(tempfile.gettempdir(), "Crier-Setup.exe")
-            with requests.get(asset_url, stream=True, timeout=120) as resp:
-                resp.raise_for_status()
-                with open(dest, "wb") as fh:
-                    for chunk in resp.iter_content(1 << 16):
-                        if chunk:
-                            fh.write(chunk)
-            # Launch the installer and quit so it can replace files.
-            QProcess.startDetached(dest, [])
-            from PySide6.QtWidgets import QApplication
-            QApplication.quit()
+            pip = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "-r", "requirements.txt"],
+                cwd=REPO_DIR, capture_output=True, text=True, timeout=300,
+                creationflags=_NO_WINDOW,
+            )
+            if pip.returncode != 0:
+                QMessageBox.critical(self._parent, "Crier", f"Dependency update failed:\n{pip.stderr}")
+                return
         except Exception as e:
-            QMessageBox.critical(self._parent, "Crier", f"Update failed:\n{e}")
+            QMessageBox.critical(self._parent, "Crier", f"Dependency update failed:\n{e}")
+            return
+
+        # sys.executable is pythonw.exe (that's what launched this process).
+        QProcess.startDetached(sys.executable, ["-m", "crier"], REPO_DIR)
+        from PySide6.QtWidgets import QApplication
+        QApplication.quit()

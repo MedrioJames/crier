@@ -13,16 +13,21 @@ neural voice reads it — all on-device, no cloud, no account.
 - **Tray icon** — show the controls, open settings, check for updates, or quit.
 - **Local & private** — Kokoro runs offline on your CPU; text never leaves your machine.
 - **Single instance** — launching again just pops the controls back up.
-- **Self-updating** — checks GitHub releases on startup (and on demand) and offers to update.
+- **Self-updating** — checks the git remote on startup (and on demand), then pulls and
+  restarts in place.
 - **Settings** — voice, language, hotkeys, GPU toggle, auto-update, start-at-login.
 
-## Run from source (development)
+## Setup
+
+Crier runs from a plain git checkout — no installer, no frozen exe. That also sidesteps
+Windows SmartScreen blocking an unsigned downloaded `.exe`, which some corporate-managed
+machines won't let you override.
 
 Use **Python 3.10–3.12** (Kokoro's dependencies don't ship 3.13 wheels yet).
 
 ```bash
-py -3.12 -m venv venv
-venv\Scripts\activate
+py -3.12 -m venv .venv
+.venv\Scripts\activate
 pip install -r requirements.txt
 python -m crier
 ```
@@ -30,18 +35,22 @@ python -m crier
 On first run, Crier downloads the Kokoro model (~330 MB) into
 `%LOCALAPPDATA%\Crier\models`. That's the only network step, and it's a one-time thing.
 
-## Build the installer
+## Running it day to day
 
-```bash
-pip install pyinstaller pillow
-python build/make_icon.py          # generates crier/resources/crier.ico
-pyinstaller build/crier.spec       # -> dist/Crier/Crier.exe
-iscc build/installer.iss           # -> dist/Crier-Setup-<version>.exe  (needs Inno Setup)
-```
+- **Manual launch**: double-click [run-crier.bat](run-crier.bat).
+- **Start at login**: either copy [run-crier-hidden.vbs](run-crier-hidden.vbs) into your
+  Startup folder (`Win+R` → `shell:startup`), or just check "start at login" in Crier's
+  own Settings dialog once it's running.
 
-Or just push a tag (`git tag v0.1.0 && git push --tags`) and the GitHub Actions
-workflow builds the installer and attaches it to the release. The self-updater
-looks for that `.exe` asset.
+Both launch through `pythonw.exe` (no console window), which is also why they're not
+subject to the same SmartScreen check a downloaded `.exe` would be.
+
+## Updating
+
+The tray menu's "Check for updates" (and the auto-update-on-startup setting) run
+`git fetch` against `origin/main`, and if there's something new, pull it in with
+`git pull --ff-only`, reinstall `requirements.txt`, and restart. No download, nothing
+to sign, nothing for SmartScreen to block.
 
 ## Hotkeys (default)
 
@@ -59,9 +68,9 @@ Change them in Settings (tray icon → Settings). Format is pynput style, e.g. `
 - **GPU (DirectML)** is an experimental toggle. Kokoro currently errors on DirectML
   (a ConvTranspose op issue), so Crier smoke-tests it at load and silently falls back
   to CPU. CPU is real-time for this model anyway.
-- **Corporate machines**: the self-updater downloads and runs an installer, which some
-  managed environments block. The manual "Check for updates" falls back to opening the
-  releases page if no installer asset is found.
+- **Updating requires `git` on PATH** and a clean fast-forward from `origin/main` -
+  if you've made local edits that conflict, `git pull --ff-only` will fail and the
+  update dialog reports it rather than clobbering your changes.
 
 ## License
 

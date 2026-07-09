@@ -8,6 +8,5 @@ pyperclip>=1.8
 pynput>=1.7
 requests>=2.31
 
-# Build-time only:
-#   pyinstaller>=6.3
-#   pillow>=10        (only to regenerate the icon via build/make_icon.py)
+# Optional, only to regenerate crier/resources/crier.ico via build/make_icon.py:
+#   pillow>=10

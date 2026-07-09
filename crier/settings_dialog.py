@@ -57,6 +57,9 @@ class SettingsDialog(QDialog):
         self.hotkey_stop = HotkeyEdit(settings.hotkey_stop)
         form.addRow("Stop hotkey", self.hotkey_stop)
 
+        self.hotkey_grab = HotkeyEdit(settings.hotkey_grab)
+        form.addRow("Screen grab hotkey", self.hotkey_grab)
+
         self.use_gpu = QCheckBox("Try GPU (DirectML - experimental, falls back to CPU)")
         self.use_gpu.setChecked(settings.use_gpu)
         form.addRow("", self.use_gpu)
@@ -83,6 +86,7 @@ class SettingsDialog(QDialog):
         self.settings.lang = self.lang.currentText()
         self.settings.hotkey_read = self.hotkey_read.value()
         self.settings.hotkey_stop = self.hotkey_stop.value()
+        self.settings.hotkey_grab = self.hotkey_grab.value()
         self.settings.use_gpu = self.use_gpu.isChecked()
         self.settings.auto_update = self.auto_update.isChecked()
         self.settings.autostart = self.autostart.isChecked()

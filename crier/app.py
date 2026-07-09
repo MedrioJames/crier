@@ -20,6 +20,8 @@ from .updater import Updater
 from .autostart import set_autostart
 from . import models
 from . import winfocus
+from . import screen_ocr
+from .region_select import RegionSelectOverlay
 
 
 class App(QObject):
@@ -39,12 +41,18 @@ class App(QObject):
         self.current_text = ""
         self._busy = False
         self._last_external_hwnd = 0   # last foreground window that wasn't our own popup
+        self._grab_overlay = None      # keeps the region-select overlay alive while shown
 
         self.tray = Tray()
-        self.popup = ControlPopup(self.settings.speed, self.settings.volume, self.settings.hotkey_read)
+        self.popup = ControlPopup(
+            self.settings.speed, self.settings.volume,
+            self.settings.hotkey_read, self.settings.hotkey_grab,
+        )
         self._popup_hwnd = int(self.popup.winId())  # cached: winId() isn't safe to call off the GUI thread
         self.updater = Updater(self.popup)
-        self.hotkeys = HotkeyManager(self.settings.hotkey_read, self.settings.hotkey_stop)
+        self.hotkeys = HotkeyManager(
+            self.settings.hotkey_read, self.settings.hotkey_stop, self.settings.hotkey_grab
+        )
 
         # speed re-synth debounce
         self._speed_timer = QTimer(self)
@@ -65,16 +73,19 @@ class App(QObject):
         # Explicit QueuedConnection: hotkeys fire from pynput's own thread.
         self.hotkeys.read_triggered.connect(self.on_read, Qt.QueuedConnection)
         self.hotkeys.stop_triggered.connect(self.on_stop, Qt.QueuedConnection)
+        self.hotkeys.grab_triggered.connect(self.on_screen_grab, Qt.QueuedConnection)
 
         self.tray.show_controls.connect(self.show_controls)
         self.tray.open_settings.connect(self.open_settings)
         self.tray.check_updates.connect(lambda: self.updater.check(silent=False))
+        self.tray.screen_grab.connect(self.on_screen_grab)
         self.tray.quit_app.connect(self.quit)
 
         self.popup.play_pause.connect(self.on_play_pause)
         self.popup.stop.connect(self.on_stop)
         self.popup.reread.connect(self._resynth_current)
         self.popup.read_selection.connect(self.on_read)
+        self.popup.screen_grab.connect(self.on_screen_grab)
         self.popup.open_settings.connect(self.open_settings)
         self.popup.quit_app.connect(self.quit)
         self.popup.volume_changed.connect(self.on_volume)
@@ -130,17 +141,52 @@ class App(QObject):
             if not text:
                 self.sig_status.emit("Crier - nothing selected")
                 return
-            self.current_text = text
-            self.sig_status.emit("Crier - synthesizing...")
-            samples, sr = self.engine.synthesize(
-                text, self.settings.voice, self.settings.speed, self.settings.lang
-            )
-            self.player.set_volume(self.settings.volume)
-            self.player.play(samples, sr)
-            self.sig_status.emit(f"Crier ({self.engine.backend})")
-            self.sig_ready.emit(True)
+            self._speak_text(text)
         except Exception as e:
             self.sig_status.emit(f"Crier - error: {type(e).__name__}")
+        finally:
+            self._busy = False
+
+    def _speak_text(self, text: str):
+        self.current_text = text
+        self.sig_status.emit("Crier - synthesizing...")
+        samples, sr = self.engine.synthesize(
+            text, self.settings.voice, self.settings.speed, self.settings.lang
+        )
+        self.player.set_volume(self.settings.volume)
+        self.player.play(samples, sr)
+        self.sig_status.emit(f"Crier ({self.engine.backend})")
+        self.sig_ready.emit(True)
+
+    # ---------- screen grab -> OCR -> speech ----------
+    def on_screen_grab(self):
+        if self._busy:
+            return
+        overlay = RegionSelectOverlay()
+        self._grab_overlay = overlay   # hold a ref so Python doesn't GC it while shown
+        overlay.region_captured.connect(self._on_region_captured)
+        overlay.cancelled.connect(self._on_grab_cancelled)
+        overlay.show_and_focus()
+
+    def _on_region_captured(self, pixmap):
+        self._grab_overlay = None
+        self._busy = True
+        self.sig_status.emit("Crier - reading screen text...")
+        threading.Thread(target=self._ocr_worker, args=(pixmap,), daemon=True).start()
+
+    def _on_grab_cancelled(self):
+        self._grab_overlay = None
+
+    def _ocr_worker(self, pixmap):
+        try:
+            text = screen_ocr.recognize_text(pixmap).strip()
+            self.sig_show_popup.emit()
+            if not text:
+                self.sig_status.emit("Crier - no text found in that region")
+                return
+            self._speak_text(text)
+        except Exception as e:
+            self.sig_status.emit(f"Crier - OCR error: {type(e).__name__}")
         finally:
             self._busy = False
 
@@ -217,8 +263,11 @@ class App(QObject):
         if dlg.exec():
             old_gpu = self.settings.use_gpu
             dlg.apply_to_settings()
-            self.hotkeys.rebind(self.settings.hotkey_read, self.settings.hotkey_stop)
+            self.hotkeys.rebind(
+                self.settings.hotkey_read, self.settings.hotkey_stop, self.settings.hotkey_grab
+            )
             self.popup.set_hotkey_hint(self.settings.hotkey_read)
+            self.popup.set_grab_hotkey_hint(self.settings.hotkey_grab)
             set_autostart(self.settings.autostart)
             if self.settings.use_gpu != old_gpu:
                 self.engine = Engine(use_gpu=self.settings.use_gpu)   # lazy reload

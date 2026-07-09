@@ -43,13 +43,14 @@ class ControlPopup(QWidget):
     stop = Signal()
     reread = Signal()
     read_selection = Signal()
+    screen_grab = Signal()
     open_settings = Signal()
     quit_app = Signal()
     seek_requested = Signal(float)    # 0.0 .. 1.0
     speed_changed = Signal(float)     # 0.5 .. 2.0
     volume_changed = Signal(float)    # 0.0 .. 1.0
 
-    def __init__(self, speed: float, volume: float, hotkey_read: str = ""):
+    def __init__(self, speed: float, volume: float, hotkey_read: str = "", hotkey_grab: str = ""):
         super().__init__(None)
         self.setWindowFlags(
             Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
@@ -71,11 +72,16 @@ class ControlPopup(QWidget):
         self.drag_handle = _DragHandle(self)
         root.addWidget(self.drag_handle)
 
-        # Primary action
+        # Primary actions
         self.btn_read = QPushButton("Read Selection")
         self.btn_read.setCursor(Qt.PointingHandCursor)
         self.btn_read.setObjectName("readBtn")
         root.addWidget(self.btn_read)
+
+        self.btn_grab = QPushButton("Screen Grab -> Speech")
+        self.btn_grab.setCursor(Qt.PointingHandCursor)
+        self.btn_grab.setObjectName("grabBtn")
+        root.addWidget(self.btn_grab)
 
         self.status_label = QLabel("Select text anywhere, then use the hotkey or this button.")
         self.status_label.setWordWrap(True)
@@ -136,6 +142,7 @@ class ControlPopup(QWidget):
 
         # Wiring
         self.btn_read.clicked.connect(self.read_selection.emit)
+        self.btn_grab.clicked.connect(self.screen_grab.emit)
         self.btn_play.clicked.connect(self.play_pause.emit)
         self.btn_stop.clicked.connect(self.stop.emit)
         self.btn_reread.clicked.connect(self.reread.emit)
@@ -162,6 +169,8 @@ class ControlPopup(QWidget):
             QPushButton:hover { background: #39415a; }
             QPushButton#readBtn { background: #3a5ba0; border-color: #4d76c4; font-weight: 600; }
             QPushButton#readBtn:hover { background: #4569b8; }
+            QPushButton#grabBtn { background: #2f5c4a; border-color: #3f7a61; }
+            QPushButton#grabBtn:hover { background: #386f59; }
             QPushButton#iconBtn { font-size: 15px; padding: 0px; }
             QLabel#time { color: #9aa3b8; font-size: 11px; }
             QSlider::groove:horizontal { height: 4px; background: #3a4054; border-radius: 2px; }
@@ -170,6 +179,7 @@ class ControlPopup(QWidget):
         )
         self.setFixedWidth(280)
         self.set_hotkey_hint(hotkey_read)
+        self.set_grab_hotkey_hint(hotkey_grab)
 
     def set_playing(self, playing: bool):
         self.btn_play.setText("⏸" if playing else "▶")
@@ -185,6 +195,11 @@ class ControlPopup(QWidget):
         pretty = pretty_hotkey(hotkey_read) if hotkey_read else ""
         self.btn_read.setText(f"Read Selection ({pretty})" if pretty else "Read Selection")
         self.btn_read.setToolTip(f"Same as pressing {pretty}" if pretty else "")
+
+    def set_grab_hotkey_hint(self, hotkey_grab: str):
+        pretty = pretty_hotkey(hotkey_grab) if hotkey_grab else ""
+        self.btn_grab.setText(f"Screen Grab -> Speech ({pretty})" if pretty else "Screen Grab -> Speech")
+        self.btn_grab.setToolTip(f"Same as pressing {pretty}" if pretty else "")
 
     def mark_user_moved(self):
         self._user_moved = True

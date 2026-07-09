@@ -7,11 +7,13 @@ from PySide6.QtCore import QObject, Signal
 class HotkeyManager(QObject):
     read_triggered = Signal()
     stop_triggered = Signal()
+    grab_triggered = Signal()
 
-    def __init__(self, read_combo: str, stop_combo: str):
+    def __init__(self, read_combo: str, stop_combo: str, grab_combo: str):
         super().__init__()
         self._read = read_combo
         self._stop = stop_combo
+        self._grab = grab_combo
         self._listener = None
 
     def start(self):
@@ -21,6 +23,7 @@ class HotkeyManager(QObject):
         self._listener = keyboard.GlobalHotKeys({
             self._read: self.read_triggered.emit,
             self._stop: self.stop_triggered.emit,
+            self._grab: self.grab_triggered.emit,
         })
         self._listener.start()
 
@@ -29,7 +32,8 @@ class HotkeyManager(QObject):
             self._listener.stop()
             self._listener = None
 
-    def rebind(self, read_combo: str, stop_combo: str):
+    def rebind(self, read_combo: str, stop_combo: str, grab_combo: str):
         self._read = read_combo
         self._stop = stop_combo
+        self._grab = grab_combo
         self.start()

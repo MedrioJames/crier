@@ -75,6 +75,14 @@ class Settings:
     def hotkey_stop(self, v: str):
         self._s.setValue("hotkey_stop", v)
 
+    @property
+    def hotkey_grab(self) -> str:
+        return self._s.value("hotkey_grab", "<ctrl>+<alt>+g", str)
+
+    @hotkey_grab.setter
+    def hotkey_grab(self, v: str):
+        self._s.setValue("hotkey_grab", v)
+
     # --- behaviour ---
     @property
     def auto_update(self) -> bool:

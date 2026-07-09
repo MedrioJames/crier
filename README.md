@@ -9,8 +9,12 @@ neural voice reads it — all on-device, no cloud, no account.
 ## Features
 
 - **Read anywhere** — select text in any app, press `Ctrl+Alt+R`.
-- **Quick controls popup** — play/pause, stop, re-read, speed, and volume, right at your cursor.
-- **Tray icon** — show the controls, open settings, check for updates, or quit.
+- **Screen grab → speech** — press `Ctrl+Alt+G`, drag a box around any on-screen text (even
+  text you can't select, like images or disabled-selection web pages), and Crier reads it
+  aloud. Uses Windows' built-in OCR engine - no model download, no extra install.
+- **Quick controls popup** — icon transport buttons, a click/drag seek bar, speed, and
+  volume, docked in a screen corner (or wherever you drag it).
+- **Tray icon** — show the controls, screen grab, open settings, check for updates, or quit.
 - **Local & private** — Kokoro runs offline on your CPU; text never leaves your machine.
 - **Single instance** — launching again just pops the controls back up.
 - **Self-updating** — checks the git remote on startup (and on demand), then pulls and
@@ -58,6 +62,7 @@ to sign, nothing for SmartScreen to block.
 |---|---|
 | Read selection | `Ctrl+Alt+R` |
 | Stop | `Ctrl+Alt+S` |
+| Screen grab → speech | `Ctrl+Alt+G` |
 
 Change them in Settings (tray icon → Settings). Format is pynput style, e.g. `<ctrl>+<alt>+r`.
 
@@ -71,6 +76,10 @@ Change them in Settings (tray icon → Settings). Format is pynput style, e.g. `
 - **Updating requires `git` on PATH** and a clean fast-forward from `origin/main` -
   if you've made local edits that conflict, `git pull --ff-only` will fail and the
   update dialog reports it rather than clobbering your changes.
+- **Synthesis isn't streamed** — Kokoro generates the entire audio clip before playback
+  starts, so longer selections have a longer wait up front. The screen-grab/OCR step
+  itself is fast (tens of milliseconds); this delay is purely the TTS step and affects
+  both Read Selection and Screen Grab equally.
 
 ## License
 

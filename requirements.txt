@@ -7,6 +7,7 @@ numpy>=2.0.2
 pyperclip>=1.8
 pynput>=1.7
 requests>=2.31
+winsdk>=1.0.0b10             # native Windows OCR for the screen-grab-to-speech feature
 
 # Optional, only to regenerate crier/resources/crier.ico via build/make_icon.py:
 #   pillow>=10

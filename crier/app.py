@@ -2,6 +2,7 @@
 
 import sys
 import threading
+import time
 
 from PySide6.QtCore import QObject, Signal, QTimer, Qt
 from PySide6.QtWidgets import QApplication
@@ -18,12 +19,14 @@ from .settings_dialog import SettingsDialog
 from .updater import Updater
 from .autostart import set_autostart
 from . import models
+from . import winfocus
 
 
 class App(QObject):
     # cross-thread status updates (emitted from the synth worker)
     sig_status = Signal(str)
     sig_ready = Signal(bool)          # True once audio is playing
+    sig_show_popup = Signal()         # emitted from the read worker thread
 
     def __init__(self, qapp: QApplication):
         super().__init__()
@@ -35,9 +38,11 @@ class App(QObject):
 
         self.current_text = ""
         self._busy = False
+        self._last_external_hwnd = 0   # last foreground window that wasn't our own popup
 
         self.tray = Tray()
-        self.popup = ControlPopup(self.settings.speed, self.settings.volume)
+        self.popup = ControlPopup(self.settings.speed, self.settings.volume, self.settings.hotkey_read)
+        self._popup_hwnd = int(self.popup.winId())  # cached: winId() isn't safe to call off the GUI thread
         self.updater = Updater(self.popup)
         self.hotkeys = HotkeyManager(self.settings.hotkey_read, self.settings.hotkey_stop)
 
@@ -63,34 +68,56 @@ class App(QObject):
         self.popup.play_pause.connect(self.on_play_pause)
         self.popup.stop.connect(self.on_stop)
         self.popup.reread.connect(self._resynth_current)
+        self.popup.read_selection.connect(self.on_read)
         self.popup.volume_changed.connect(self.on_volume)
         self.popup.speed_changed.connect(self.on_speed)
 
-        # Explicit QueuedConnection: these three all cross from a worker
-        # thread (PortAudio callback / synth threads) onto the GUI thread.
+        # Explicit QueuedConnection: these all cross from a worker thread
+        # (PortAudio callback / synth / read-worker threads) onto the GUI thread.
         self.player.finished.connect(self._on_playback_finished, Qt.QueuedConnection)
 
         self.sig_status.connect(self.tray.tray.setToolTip, Qt.QueuedConnection)
+        self.sig_status.connect(self.popup.set_status, Qt.QueuedConnection)
         self.sig_ready.connect(self.popup.set_playing, Qt.QueuedConnection)
+        self.sig_show_popup.connect(self.popup.show_near_cursor, Qt.QueuedConnection)
 
     def start(self):
         self.tray.show()
         self.hotkeys.start()
+        self.show_controls()
         if self.settings.auto_update:
             QTimer.singleShot(2500, lambda: self.updater.check(silent=True))
 
     # ---------- read / play ----------
     def on_read(self):
-        # Show controls immediately on keypress; synth happens in the background.
-        self.popup.show_near_cursor()
+        # Remember whatever's focused *before* we might show/raise the popup -
+        # both the hotkey path (nothing shown yet) and the button-click path
+        # (popup already has focus) need this to grab the right selection.
+        self._remember_foreground()
         if self._busy:
+            self.popup.show_near_cursor()
             return
         self._busy = True
         threading.Thread(target=self._read_worker, daemon=True).start()
 
+    def _remember_foreground(self):
+        fg = winfocus.get_foreground()
+        if fg and fg != self._popup_hwnd:
+            self._last_external_hwnd = fg
+
     def _read_worker(self):
         try:
+            # If our own popup currently has focus (e.g. the user clicked its
+            # "Read Selection" button), restore focus to the app the text is
+            # actually selected in before copying - Ctrl+C otherwise copies
+            # from whatever window is focused, not whichever one shows a
+            # visual selection.
+            if winfocus.get_foreground() == self._popup_hwnd:
+                winfocus.set_foreground(self._last_external_hwnd)
+                time.sleep(0.08)
+
             text = grab_selection()
+            self.sig_show_popup.emit()
             if not text:
                 self.sig_status.emit("Crier - nothing selected")
                 return
@@ -154,6 +181,7 @@ class App(QObject):
 
     # ---------- tray actions ----------
     def show_controls(self):
+        self._remember_foreground()
         self.popup.show_near_cursor()
 
     def open_settings(self):
@@ -162,6 +190,7 @@ class App(QObject):
             old_gpu = self.settings.use_gpu
             dlg.apply_to_settings()
             self.hotkeys.rebind(self.settings.hotkey_read, self.settings.hotkey_stop)
+            self.popup.set_hotkey_hint(self.settings.hotkey_read)
             set_autostart(self.settings.autostart)
             if self.settings.use_gpu != old_gpu:
                 self.engine = Engine(use_gpu=self.settings.use_gpu)   # lazy reload

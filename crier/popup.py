@@ -6,15 +6,18 @@ from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QSlider, QLabel, QFrame
 )
 
+from .hotkey_capture import pretty_hotkey
+
 
 class ControlPopup(QWidget):
     play_pause = Signal()
     stop = Signal()
     reread = Signal()
+    read_selection = Signal()
     speed_changed = Signal(float)     # 0.5 .. 2.0
     volume_changed = Signal(float)    # 0.0 .. 1.0
 
-    def __init__(self, speed: float, volume: float):
+    def __init__(self, speed: float, volume: float, hotkey_read: str = ""):
         super().__init__(None)
         self.setWindowFlags(
             Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
@@ -31,6 +34,17 @@ class ControlPopup(QWidget):
         root = QVBoxLayout(card)
         root.setContentsMargins(12, 10, 12, 10)
         root.setSpacing(8)
+
+        # Primary action
+        self.btn_read = QPushButton("Read Selection")
+        self.btn_read.setCursor(Qt.PointingHandCursor)
+        self.btn_read.setObjectName("readBtn")
+        root.addWidget(self.btn_read)
+
+        self.status_label = QLabel("Select text anywhere, then use the hotkey or this button.")
+        self.status_label.setWordWrap(True)
+        self.status_label.setObjectName("status")
+        root.addWidget(self.status_label)
 
         # Transport row
         row = QHBoxLayout()
@@ -66,6 +80,7 @@ class ControlPopup(QWidget):
         root.addLayout(vrow)
 
         # Wiring
+        self.btn_read.clicked.connect(self.read_selection.emit)
         self.btn_play.clicked.connect(self.play_pause.emit)
         self.btn_stop.clicked.connect(self.stop.emit)
         self.btn_reread.clicked.connect(self.reread.emit)
@@ -77,19 +92,31 @@ class ControlPopup(QWidget):
             """
             #card { background: #1f2330; border: 1px solid #3a4054; border-radius: 12px; }
             QLabel { color: #c8cede; font-size: 12px; }
+            QLabel#status { color: #9aa3b8; font-size: 11px; }
             QPushButton {
                 background: #2c3244; color: #e8ecf6; border: 1px solid #3a4054;
                 border-radius: 8px; padding: 6px 10px; font-size: 12px;
             }
             QPushButton:hover { background: #39415a; }
+            QPushButton#readBtn { background: #3a5ba0; border-color: #4d76c4; font-weight: 600; }
+            QPushButton#readBtn:hover { background: #4569b8; }
             QSlider::groove:horizontal { height: 4px; background: #3a4054; border-radius: 2px; }
             QSlider::handle:horizontal { width: 14px; margin: -6px 0; border-radius: 7px; background: #6ea8fe; }
             """
         )
         self.setFixedWidth(280)
+        self.set_hotkey_hint(hotkey_read)
 
     def set_playing(self, playing: bool):
         self.btn_play.setText("Pause" if playing else "Play")
+
+    def set_status(self, text: str):
+        self.status_label.setText(text)
+
+    def set_hotkey_hint(self, hotkey_read: str):
+        pretty = pretty_hotkey(hotkey_read) if hotkey_read else ""
+        self.btn_read.setText(f"Read Selection ({pretty})" if pretty else "Read Selection")
+        self.btn_read.setToolTip(f"Same as pressing {pretty}" if pretty else "")
 
     def _on_speed(self, val):
         self.speed_label.setText(f"{val / 100:.2f}x")

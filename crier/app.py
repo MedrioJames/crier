@@ -52,6 +52,12 @@ class App(QObject):
         self._speed_timer.setInterval(400)
         self._speed_timer.timeout.connect(self._resynth_current)
 
+        # seek bar / time label position updates
+        self._position_timer = QTimer(self)
+        self._position_timer.setInterval(150)
+        self._position_timer.timeout.connect(self._update_position)
+        self._position_timer.start()
+
         self._connect()
 
     # ---------- wiring ----------
@@ -73,6 +79,7 @@ class App(QObject):
         self.popup.quit_app.connect(self.quit)
         self.popup.volume_changed.connect(self.on_volume)
         self.popup.speed_changed.connect(self.on_speed)
+        self.popup.seek_requested.connect(self.on_seek)
 
         # Explicit QueuedConnection: these all cross from a worker thread
         # (PortAudio callback / synth / read-worker threads) onto the GUI thread.
@@ -164,8 +171,22 @@ class App(QObject):
         self.popup.set_playing(not self.player.is_paused())
 
     def on_stop(self):
+        dur = self.player.duration_seconds()
         self.player.stop()
         self.popup.set_playing(False)
+        self.popup.set_position(0.0, 0.0, dur)
+
+    def on_seek(self, frac: float):
+        self.player.seek_fraction(frac)
+
+    def _update_position(self):
+        if not self.player.is_active():
+            return
+        self.popup.set_position(
+            self.player.position_fraction(),
+            self.player.position_seconds(),
+            self.player.duration_seconds(),
+        )
 
     def _on_playback_finished(self):
         # player.finished is emitted from the PortAudio callback thread; this

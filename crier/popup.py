@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 )
 
 from .hotkey_capture import pretty_hotkey
+from .seek_slider import SeekSlider
 
 
 class _DragHandle(QLabel):
@@ -44,6 +45,7 @@ class ControlPopup(QWidget):
     read_selection = Signal()
     open_settings = Signal()
     quit_app = Signal()
+    seek_requested = Signal(float)    # 0.0 .. 1.0
     speed_changed = Signal(float)     # 0.5 .. 2.0
     volume_changed = Signal(float)    # 0.0 .. 1.0
 
@@ -80,15 +82,25 @@ class ControlPopup(QWidget):
         self.status_label.setObjectName("status")
         root.addWidget(self.status_label)
 
-        # Transport row
+        # Transport: compact icon buttons over a seek bar
         row = QHBoxLayout()
-        self.btn_play = QPushButton("Pause")
-        self.btn_stop = QPushButton("Stop")
-        self.btn_reread = QPushButton("Re-read")
+        row.setSpacing(6)
+        self.btn_play = QPushButton("⏸")
+        self.btn_stop = QPushButton("⏹")
+        self.btn_reread = QPushButton("↻")
         for b in (self.btn_play, self.btn_stop, self.btn_reread):
             b.setCursor(Qt.PointingHandCursor)
+            b.setObjectName("iconBtn")
+            b.setFixedSize(36, 30)
             row.addWidget(b)
+        row.addStretch(1)
+        self.time_label = QLabel("0:00 / 0:00")
+        self.time_label.setObjectName("time")
+        row.addWidget(self.time_label)
         root.addLayout(row)
+
+        self.seek = SeekSlider()
+        root.addWidget(self.seek)
 
         # Settings / Hide / Quit row
         row2 = QHBoxLayout()
@@ -130,6 +142,7 @@ class ControlPopup(QWidget):
         self.btn_settings.clicked.connect(self.open_settings.emit)
         self.btn_hide.clicked.connect(self.hide)
         self.btn_quit.clicked.connect(self.quit_app.emit)
+        self.seek.seek_requested.connect(self.seek_requested.emit)
         self.speed.valueChanged.connect(self._on_speed)
         self.volume.valueChanged.connect(self._on_volume)
 
@@ -149,6 +162,8 @@ class ControlPopup(QWidget):
             QPushButton:hover { background: #39415a; }
             QPushButton#readBtn { background: #3a5ba0; border-color: #4d76c4; font-weight: 600; }
             QPushButton#readBtn:hover { background: #4569b8; }
+            QPushButton#iconBtn { font-size: 15px; padding: 0px; }
+            QLabel#time { color: #9aa3b8; font-size: 11px; }
             QSlider::groove:horizontal { height: 4px; background: #3a4054; border-radius: 2px; }
             QSlider::handle:horizontal { width: 14px; margin: -6px 0; border-radius: 7px; background: #6ea8fe; }
             """
@@ -157,10 +172,14 @@ class ControlPopup(QWidget):
         self.set_hotkey_hint(hotkey_read)
 
     def set_playing(self, playing: bool):
-        self.btn_play.setText("Pause" if playing else "Play")
+        self.btn_play.setText("⏸" if playing else "▶")
 
     def set_status(self, text: str):
         self.status_label.setText(text)
+
+    def set_position(self, frac: float, pos_secs: float, dur_secs: float):
+        self.seek.set_position(frac)
+        self.time_label.setText(f"{_fmt_time(pos_secs)} / {_fmt_time(dur_secs)}")
 
     def set_hotkey_hint(self, hotkey_read: str):
         pretty = pretty_hotkey(hotkey_read) if hotkey_read else ""
@@ -197,3 +216,8 @@ class ControlPopup(QWidget):
         x = geo.right() - self.width() - margin
         y = geo.bottom() - self.height() - margin
         self.move(QPoint(x, y))
+
+
+def _fmt_time(seconds: float) -> str:
+    seconds = max(0, int(seconds))
+    return f"{seconds // 60}:{seconds % 60:02d}"

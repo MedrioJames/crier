@@ -50,6 +50,27 @@ class Player(QObject):
     def is_active(self) -> bool:
         return self._stream is not None and self._stream.active
 
+    def duration_seconds(self) -> float:
+        with self._lock:
+            return len(self._samples) / self._sr if self._samples is not None else 0.0
+
+    def position_seconds(self) -> float:
+        with self._lock:
+            return self._pos / self._sr if self._samples is not None else 0.0
+
+    def position_fraction(self) -> float:
+        with self._lock:
+            if self._samples is None or len(self._samples) == 0:
+                return 0.0
+            return self._pos / len(self._samples)
+
+    def seek_fraction(self, frac: float):
+        with self._lock:
+            if self._samples is None:
+                return
+            frac = max(0.0, min(1.0, float(frac)))
+            self._pos = int(frac * len(self._samples))
+
     def stop(self):
         s = self._stream
         self._stream = None

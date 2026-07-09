@@ -1,6 +1,7 @@
 """Enable/disable 'start at login' via the Windows Run registry key. No-op elsewhere."""
 
 import sys
+from pathlib import Path
 
 from . import config
 
@@ -8,10 +9,11 @@ _RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 
 def _launch_command() -> str:
-    # Frozen (PyInstaller) -> the exe itself. Dev -> python -m crier.
+    # Frozen (PyInstaller) -> the exe itself. Dev -> pythonw -m crier (no console window).
     if getattr(sys, "frozen", False):
         return f'"{sys.executable}"'
-    return f'"{sys.executable}" -m crier'
+    pythonw = str(Path(sys.executable).with_name("pythonw.exe"))
+    return f'"{pythonw}" -m crier'
 
 
 def set_autostart(enabled: bool):

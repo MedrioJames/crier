@@ -111,7 +111,15 @@ class App(QObject):
         self.show_controls()
         self.tray.show()
         self.hotkeys.start()
-        threading.Thread(target=self._warm_up_engine, daemon=True).start()
+        # Force the popup to actually paint *now*, on this thread, before
+        # starting the load. Loading the ONNX model holds Python's GIL for
+        # long stretches (measured 500ms+ single stalls just building the
+        # inference session) - a background thread doesn't fully protect
+        # the GUI thread from that, so without this the first paint can
+        # itself get delayed until loading is already done, and "loading"
+        # never actually appears on screen.
+        self.qapp.processEvents()
+        QTimer.singleShot(50, lambda: threading.Thread(target=self._warm_up_engine, daemon=True).start())
         if self.settings.auto_update:
             QTimer.singleShot(2500, lambda: self.updater.check(silent=True))
 

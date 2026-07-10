@@ -103,11 +103,16 @@ class ControlPopup(QWidget):
         self.status_label.setObjectName("status")
         root.addWidget(self.status_label)
 
-        # Transport: compact icon buttons over a seek bar
+        # Transport: compact icon buttons over a seek bar.
+        # U+23F8/U+23F9 (the "proper" pause/stop symbols) get substituted
+        # with Segoe UI Emoji's color glyphs (solid blue rounded squares) -
+        # the Unicode text-presentation selector doesn't stop Qt's font
+        # fallback from picking that font in the first place. Using plain
+        # ASCII / pre-emoji-era glyphs sidesteps the substitution entirely.
         row = QHBoxLayout()
         row.setSpacing(6)
-        self.btn_play = QPushButton("⏸")
-        self.btn_stop = QPushButton("⏹")
+        self.btn_play = QPushButton("▶")
+        self.btn_stop = QPushButton("■")
         self.btn_reread = QPushButton("↻")
         for b in (self.btn_play, self.btn_stop, self.btn_reread):
             b.setCursor(Qt.PointingHandCursor)
@@ -198,7 +203,7 @@ class ControlPopup(QWidget):
         self.set_grab_hotkey_hint(hotkey_grab)
 
     def set_playing(self, playing: bool):
-        self.btn_play.setText("⏸" if playing else "▶")
+        self.btn_play.setText("| |" if playing else "▶")
 
     def set_status(self, text: str):
         self.status_label.setText(text)

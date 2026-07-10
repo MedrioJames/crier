@@ -1,6 +1,7 @@
 """Grab the current selection from any app, and synthesize it with Kokoro."""
 
 import re
+import threading
 import time
 
 import numpy as np
@@ -12,9 +13,10 @@ from . import config
 _kbd = keyboard.Controller()
 COPY_DELAY = 0.12
 
-_SENTENCE_GAP_SECONDS = 0.28   # pause between sentences within the same line
-_LINE_GAP_SECONDS = 0.65       # pause between lines/paragraphs (e.g. a title -> body)
+_LINE_GAP_SECONDS = 0.9        # pause between lines/paragraphs (e.g. a title -> body)
+_GROUP_GAP_SECONDS = 0.12      # small gap only where a long paragraph had to be split for streaming
 _FADE_SECONDS = 0.02           # short edge fade on every chunk so splices don't click
+_MAX_CHUNK_CHARS = 220         # group consecutive sentences up to roughly this size per chunk
 
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 
@@ -88,56 +90,87 @@ class Engine:
         self.use_gpu = use_gpu
         self.backend = "cpu"
         self._kokoro = None
+        self._load_lock = threading.Lock()
 
     def load(self):
-        import onnxruntime
-        from kokoro_onnx import Kokoro
-
-        model, voices = config.model_paths()
-        model, voices = str(model), str(voices)
-
-        if self.use_gpu and "DmlExecutionProvider" in onnxruntime.get_available_providers():
-            try:
-                opts = onnxruntime.SessionOptions()
-                opts.enable_mem_pattern = False
-                opts.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
-                session = onnxruntime.InferenceSession(
-                    model, sess_options=opts,
-                    providers=["DmlExecutionProvider", "CPUExecutionProvider"],
-                )
-                self._kokoro = Kokoro.from_session(session, voices)
-                self._kokoro.create("warm up", voice="af_heart", speed=1.0, lang="en-us")
-                self.backend = "directml"
+        # Guards against loading twice if a proactive background warm-up
+        # (see App.start()) and a real synthesis request race each other.
+        with self._load_lock:
+            if self._kokoro is not None:
                 return
-            except Exception as e:
-                print(f"[crier] GPU path failed ({type(e).__name__}: {e}); using CPU")
 
-        self._kokoro = Kokoro(model, voices)
-        self.backend = "cpu"
+            import onnxruntime
+            from kokoro_onnx import Kokoro
+
+            model, voices = config.model_paths()
+            model, voices = str(model), str(voices)
+
+            if self.use_gpu and "DmlExecutionProvider" in onnxruntime.get_available_providers():
+                try:
+                    opts = onnxruntime.SessionOptions()
+                    opts.enable_mem_pattern = False
+                    opts.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
+                    session = onnxruntime.InferenceSession(
+                        model, sess_options=opts,
+                        providers=["DmlExecutionProvider", "CPUExecutionProvider"],
+                    )
+                    self._kokoro = Kokoro.from_session(session, voices)
+                    self._kokoro.create("warm up", voice="af_heart", speed=1.0, lang="en-us")
+                    self.backend = "directml"
+                    return
+                except Exception as e:
+                    print(f"[crier] GPU path failed ({type(e).__name__}: {e}); using CPU")
+
+            self._kokoro = Kokoro(model, voices)
+            self.backend = "cpu"
+            # The CPU path skipped this warm-up call before - meaning the
+            # model-load + phonemizer-init cost (~1-2s) landed on whatever
+            # the user's first Read Selection happened to be. App.start()
+            # calls load() in the background right after launch so this
+            # already happened by the time they actually use the hotkey.
+            self._kokoro.create("warm up", voice="af_heart", speed=1.0, lang="en-us")
 
     def split_into_chunks(self, text: str):
-        """Break text into small speakable chunks (roughly one sentence
-        each) paired with the silence to insert after each one: a short
-        gap between sentences, a longer one between lines/paragraphs -
-        Kokoro's phonemizer treats a bare newline as just whitespace, so a
-        title followed by a paragraph would otherwise run together with no
-        pause at all. Small chunks also mean the caller can start playing
-        the first one almost immediately instead of waiting for the whole
-        text to synthesize."""
+        """Break text into speakable chunks paired with the silence to
+        insert after each one.
+
+        Consecutive sentences within the same line are grouped together
+        (up to ~_MAX_CHUNK_CHARS) rather than split one-per-chunk: handing
+        Kokoro several sentences at once lets it carry natural connected
+        prosody across them, whereas synthesizing every sentence in total
+        isolation made each one sound like the start of a new paragraph -
+        losing the actual distinction between "mid-paragraph" and "new
+        paragraph". A run-on paragraph with no line breaks still gets cut
+        into a few chunks (for a reasonably fast time-to-first-audio), just
+        with a much smaller, near-inaudible gap between those pieces than
+        the real pause used between lines/paragraphs.
+        """
         lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
         chunks = []
         for li, line in enumerate(lines):
             sentences = [s.strip() for s in _SENTENCE_SPLIT_RE.split(line) if s.strip()] or [line]
-            for si, sentence in enumerate(sentences):
-                last_in_line = si == len(sentences) - 1
-                last_line = li == len(lines) - 1
-                if last_in_line and last_line:
+
+            groups = []
+            current, current_len = [], 0
+            for sentence in sentences:
+                if current and current_len + len(sentence) > _MAX_CHUNK_CHARS:
+                    groups.append(" ".join(current))
+                    current, current_len = [], 0
+                current.append(sentence)
+                current_len += len(sentence) + 1
+            if current:
+                groups.append(" ".join(current))
+
+            last_line = li == len(lines) - 1
+            for gi, group in enumerate(groups):
+                last_group_in_line = gi == len(groups) - 1
+                if last_group_in_line and last_line:
                     pause = 0.0
-                elif last_in_line:
+                elif last_group_in_line:
                     pause = _LINE_GAP_SECONDS
                 else:
-                    pause = _SENTENCE_GAP_SECONDS
-                chunks.append((sentence, pause))
+                    pause = _GROUP_GAP_SECONDS
+                chunks.append((group, pause))
         return chunks
 
     def synthesize_chunk(self, text: str, voice: str, speed: float, lang: str, pause_after: float = 0.0):

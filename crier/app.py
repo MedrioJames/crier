@@ -106,6 +106,10 @@ class App(QObject):
         self.tray.show()
         self.hotkeys.start()
         self.show_controls()
+        # Loading the model + Kokoro's first-call phonemizer warm-up takes
+        # a couple of seconds; do it now in the background so it isn't the
+        # user's very first Read Selection that pays for it.
+        threading.Thread(target=self.engine.load, daemon=True).start()
         if self.settings.auto_update:
             QTimer.singleShot(2500, lambda: self.updater.check(silent=True))
 
@@ -291,7 +295,8 @@ class App(QObject):
             self.popup.set_grab_hotkey_hint(self.settings.hotkey_grab)
             set_autostart(self.settings.autostart)
             if self.settings.use_gpu != old_gpu:
-                self.engine = Engine(use_gpu=self.settings.use_gpu)   # lazy reload
+                self.engine = Engine(use_gpu=self.settings.use_gpu)
+                threading.Thread(target=self.engine.load, daemon=True).start()  # warm it up now, not on next read
         else:
             self.hotkeys.start()  # nothing changed - restore the still-current hotkeys
 

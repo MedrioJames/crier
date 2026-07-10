@@ -103,15 +103,30 @@ class App(QObject):
         self.sig_show_popup.connect(self.popup.show_popup, Qt.QueuedConnection)
 
     def start(self):
+        # Show the popup - with an explicit loading message - before
+        # anything else, so there's visible feedback as early in startup
+        # as possible instead of the tray/hotkeys/engine-warm-up work
+        # happening silently first.
+        self.popup.set_status("Crier is starting up - loading the voice model, please wait...")
+        self.show_controls()
         self.tray.show()
         self.hotkeys.start()
-        self.show_controls()
-        # Loading the model + Kokoro's first-call phonemizer warm-up takes
-        # a couple of seconds; do it now in the background so it isn't the
-        # user's very first Read Selection that pays for it.
-        threading.Thread(target=self.engine.load, daemon=True).start()
+        threading.Thread(target=self._warm_up_engine, daemon=True).start()
         if self.settings.auto_update:
             QTimer.singleShot(2500, lambda: self.updater.check(silent=True))
+
+    def _warm_up_engine(self):
+        # Loading the model + Kokoro's first-call phonemizer warm-up takes
+        # a couple of seconds; do it now in the background so it isn't the
+        # user's very first Read Selection that pays for it, and tell them
+        # once it's actually ready instead of leaving the loading message up.
+        try:
+            self.engine.load()
+            self.sig_status.emit(
+                f"Crier ready ({self.engine.backend}) - select text anywhere, then use the hotkey or this button."
+            )
+        except Exception as e:
+            self.sig_status.emit(f"Crier - voice model failed to load: {type(e).__name__}")
 
     # ---------- read / play ----------
     def on_read(self):
@@ -296,7 +311,8 @@ class App(QObject):
             set_autostart(self.settings.autostart)
             if self.settings.use_gpu != old_gpu:
                 self.engine = Engine(use_gpu=self.settings.use_gpu)
-                threading.Thread(target=self.engine.load, daemon=True).start()  # warm it up now, not on next read
+                self.popup.set_status("Crier is reloading the voice model, please wait...")
+                threading.Thread(target=self._warm_up_engine, daemon=True).start()  # warm it up now, not on next read
         else:
             self.hotkeys.start()  # nothing changed - restore the still-current hotkeys
 

@@ -56,12 +56,6 @@ class App(QObject):
             self.settings.hotkey_grab, self.settings.hotkey_smart,
         )
 
-        # speed re-synth debounce
-        self._speed_timer = QTimer(self)
-        self._speed_timer.setSingleShot(True)
-        self._speed_timer.setInterval(400)
-        self._speed_timer.timeout.connect(self._resynth_current)
-
         # seek bar / time label position updates
         self._position_timer = QTimer(self)
         self._position_timer.setInterval(150)
@@ -132,7 +126,7 @@ class App(QObject):
         # user's very first Read Selection that pays for it, and tell them
         # once it's actually ready instead of leaving the loading message up.
         try:
-            self.engine.load(self.settings.voice, self.settings.speed, self.settings.lang)
+            self.engine.load(self.settings.voice, max(0.5, min(2.0, self.settings.speed)), self.settings.lang)
             self.sig_status.emit(
                 f"Crier ready ({self.engine.backend}) - select text anywhere, then use the hotkey or this button."
             )
@@ -229,17 +223,22 @@ class App(QObject):
         chunks = self.engine.split_into_chunks(text)
         if not chunks:
             return
+        # Kokoro itself only accepts 0.5-2.0; anything beyond that is made
+        # up by the Player stretching this audio further during playback,
+        # same as any live speed change the user makes mid-read.
+        synth_speed = max(0.5, min(2.0, self.settings.speed))
         started = False
         for chunk_text, pause_after in chunks:
             if my_token != self._speak_token:
                 return
             samples, sr = self.engine.synthesize_chunk(
-                chunk_text, self.settings.voice, self.settings.speed, self.settings.lang, pause_after
+                chunk_text, self.settings.voice, synth_speed, self.settings.lang, pause_after
             )
             if my_token != self._speak_token:
                 return
             if not started:
-                self.player.play(samples, sr, streaming=True)
+                self.player.play(samples, sr, streaming=True, synth_speed=synth_speed)
+                self.player.set_speed(self.settings.speed)
                 self.sig_status.emit(f"Crier ({self.engine.backend})")
                 self.sig_ready.emit(True)
                 started = True
@@ -331,7 +330,7 @@ class App(QObject):
 
     def on_speed(self, speed: float):
         self.settings.speed = speed
-        self._speed_timer.start()          # debounce; re-synth after the slider settles
+        self.player.set_speed(speed)       # takes effect on the next audio callback
 
     # ---------- tray actions ----------
     def show_controls(self):

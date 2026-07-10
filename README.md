@@ -73,8 +73,11 @@ Change them in Settings (tray icon → Settings). Format is pynput style, e.g. `
 
 ## Notes & known rough edges
 
-- **Speed** is a synthesis parameter, so changing the speed slider re-generates the
-  current selection (there's a short debounce). Volume is applied live.
+- **Speed and volume are both applied live**, mid-playback, with no resynthesis. Kokoro
+  synthesizes at whatever speed you've picked (clamped to the 0.5x-2.0x it supports
+  natively); the speed slider goes up to 4.0x by stretching that audio further during
+  playback, and any speed change - even to something already playing - takes effect on
+  the very next audio callback.
 - **GPU (DirectML)** is an experimental toggle. Kokoro currently errors on DirectML
   (a ConvTranspose op issue), so Crier smoke-tests it at load and silently falls back
   to CPU. CPU is real-time for this model anyway.

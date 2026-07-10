@@ -10,6 +10,9 @@ from PySide6.QtWidgets import (
 from .hotkey_capture import pretty_hotkey
 from .seek_slider import SeekSlider
 
+_SPEED_MIN = 5     # 0.5x, in tenths
+_SPEED_MAX = 40     # 4.0x, in tenths
+
 
 class _DragHandle(QLabel):
     """The draggable part of the title bar; dragging it moves the popup
@@ -122,14 +125,26 @@ class ControlPopup(QWidget):
         self.seek = SeekSlider()
         root.addWidget(self.seek)
 
-        # Speed
+        # Speed - stepped in 0.1x increments (0.5x .. 4.0x) rather than a
+        # freely-sliding scale, with +/- buttons at each end for one-click
+        # nudges. Internally the slider works in tenths of x (5 == 0.5x).
         root.addWidget(QLabel("Speed"))
+        self.btn_speed_down = QPushButton("−")
+        self.btn_speed_up = QPushButton("+")
         self.speed = QSlider(Qt.Horizontal)
-        self.speed.setRange(50, 200)          # 0.50x .. 2.00x
-        self.speed.setValue(int(speed * 100))
-        self.speed_label = QLabel(f"{speed:.2f}x")
+        self.speed.setRange(_SPEED_MIN, _SPEED_MAX)
+        self.speed.setSingleStep(1)
+        self.speed.setPageStep(1)
+        self.speed.setValue(round(speed * 10))
+        self.speed_label = QLabel(f"{speed:.1f}x")
+        for b in (self.btn_speed_down, self.btn_speed_up):
+            b.setCursor(Qt.PointingHandCursor)
+            b.setObjectName("iconBtn")
+            b.setFixedSize(28, 26)
         srow = QHBoxLayout()
-        srow.addWidget(self.speed)
+        srow.addWidget(self.btn_speed_down)
+        srow.addWidget(self.speed, 1)
+        srow.addWidget(self.btn_speed_up)
         srow.addWidget(self.speed_label)
         root.addLayout(srow)
 
@@ -154,6 +169,8 @@ class ControlPopup(QWidget):
         self.btn_quit.clicked.connect(self.quit_app.emit)
         self.seek.seek_requested.connect(self.seek_requested.emit)
         self.speed.valueChanged.connect(self._on_speed)
+        self.btn_speed_down.clicked.connect(lambda: self.speed.setValue(self.speed.value() - 1))
+        self.btn_speed_up.clicked.connect(lambda: self.speed.setValue(self.speed.value() + 1))
         self.volume.valueChanged.connect(self._on_volume)
 
         # Click-toolbar buttons, not tab-focusable form controls - without
@@ -211,8 +228,9 @@ class ControlPopup(QWidget):
         self._user_moved = True
 
     def _on_speed(self, val):
-        self.speed_label.setText(f"{val / 100:.2f}x")
-        self.speed_changed.emit(val / 100.0)
+        speed = val / 10.0
+        self.speed_label.setText(f"{speed:.1f}x")
+        self.speed_changed.emit(speed)
 
     def _on_volume(self, val):
         self.volume_label.setText(f"{val}%")

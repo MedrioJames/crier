@@ -129,7 +129,7 @@ class App(QObject):
         # user's very first Read Selection that pays for it, and tell them
         # once it's actually ready instead of leaving the loading message up.
         try:
-            self.engine.load()
+            self.engine.load(self.settings.voice, self.settings.speed, self.settings.lang)
             self.sig_status.emit(
                 f"Crier ready ({self.engine.backend}) - select text anywhere, then use the hotkey or this button."
             )

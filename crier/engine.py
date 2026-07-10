@@ -92,7 +92,12 @@ class Engine:
         self._kokoro = None
         self._load_lock = threading.Lock()
 
-    def load(self):
+    def load(self, voice: str = "af_heart", speed: float = 1.0, lang: str = "en-us"):
+        """Load the model and run one warm-up synthesis. Pass the caller's
+        actual current voice/speed/lang (App does) rather than leaving this
+        on the hardcoded defaults - kokoro-onnx builds some state lazily
+        per-voice, so warming up with a voice the user isn't using doesn't
+        fully prime their first real read."""
         # Guards against loading twice if a proactive background warm-up
         # (see App.start()) and a real synthesis request race each other.
         with self._load_lock:
@@ -115,7 +120,7 @@ class Engine:
                         providers=["DmlExecutionProvider", "CPUExecutionProvider"],
                     )
                     self._kokoro = Kokoro.from_session(session, voices)
-                    self._kokoro.create("warm up", voice="af_heart", speed=1.0, lang="en-us")
+                    self._kokoro.create("warm up", voice=voice, speed=speed, lang=lang)
                     self.backend = "directml"
                     return
                 except Exception as e:
@@ -128,7 +133,7 @@ class Engine:
             # the user's first Read Selection happened to be. App.start()
             # calls load() in the background right after launch so this
             # already happened by the time they actually use the hotkey.
-            self._kokoro.create("warm up", voice="af_heart", speed=1.0, lang="en-us")
+            self._kokoro.create("warm up", voice=voice, speed=speed, lang=lang)
 
     def split_into_chunks(self, text: str):
         """Break text into speakable chunks paired with the silence to
@@ -177,7 +182,7 @@ class Engine:
         """Synthesize one chunk. Returns (samples, sample_rate) with edge
         fades applied and pause_after seconds of trailing silence."""
         if self._kokoro is None:
-            self.load()
+            self.load(voice, speed, lang)
         samples, sr = self._kokoro.create(text, voice=voice, speed=speed, lang=lang)
         samples = _fade_edges(samples, sr)
         if pause_after > 0:

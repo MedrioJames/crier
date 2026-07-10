@@ -19,23 +19,46 @@ class Player(QObject):
         self._sr = 24000
         self._paused = False
         self._volume = 1.0
+        self._streaming = False   # True while more chunks may still be appended
 
     def set_volume(self, vol: float):
         with self._lock:
             self._volume = max(0.0, min(1.0, float(vol)))
 
-    def play(self, samples, sample_rate: int):
+    def play(self, samples, sample_rate: int, streaming: bool = False):
+        """Start playback. If streaming=True, reaching the end of `samples`
+        doesn't stop playback or fire `finished` - call append() with more
+        audio as it becomes available, then finish_streaming() once there's
+        no more coming."""
         self.stop()
         with self._lock:
             self._samples = np.asarray(samples, dtype=np.float32).reshape(-1)
             self._sr = int(sample_rate)
             self._pos = 0
             self._paused = False
+            self._streaming = streaming
         self._stream = sd.OutputStream(
             samplerate=self._sr, channels=1,
             callback=self._callback, finished_callback=self._on_finished,
         )
         self._stream.start()
+
+    def append(self, samples):
+        """Add more audio to the end of the currently playing buffer -
+        used for chunked synthesis so playback can start on the first
+        chunk while later ones are still being generated."""
+        extra = np.asarray(samples, dtype=np.float32).reshape(-1)
+        with self._lock:
+            if self._samples is None:
+                return
+            self._samples = np.concatenate([self._samples, extra])
+
+    def finish_streaming(self):
+        """Call once no more chunks are coming, so running out of buffered
+        audio now means actually done (fires `finished`) instead of "wait
+        for more"."""
+        with self._lock:
+            self._streaming = False
 
     def toggle_pause(self):
         with self._lock:
@@ -93,7 +116,10 @@ class Player(QObject):
             outdata[:n, 0] = chunk * self._volume
             if n < frames:
                 outdata[n:, 0] = 0
-                raise sd.CallbackStop()
+                self._pos += n
+                if not self._streaming:
+                    raise sd.CallbackStop()
+                return   # more chunks may still be coming - play silence and wait
             self._pos = end
 
     def _on_finished(self):

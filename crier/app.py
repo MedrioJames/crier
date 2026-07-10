@@ -42,6 +42,7 @@ class App(QObject):
         self._busy = False
         self._last_external_hwnd = 0   # last foreground window that wasn't our own popup
         self._grab_overlay = None      # keeps the region-select overlay alive while shown
+        self._speak_token = 0          # bumped to abandon an in-flight streaming synthesis
 
         self.tray = Tray()
         self.popup = ControlPopup(
@@ -148,15 +149,39 @@ class App(QObject):
             self._busy = False
 
     def _speak_text(self, text: str):
+        """Synthesize in small chunks (roughly one sentence each) and start
+        playback on the first one instead of waiting for the whole text -
+        each later chunk gets appended to the still-playing stream as it
+        finishes. `_speak_token` lets on_stop()/a newer _speak_text() call
+        abandon an in-flight streaming loop instead of it pointlessly
+        grinding through remaining chunks (or worse, appending audio after
+        the user hit Stop)."""
         self.current_text = text
+        self._speak_token += 1
+        my_token = self._speak_token
         self.sig_status.emit("Crier - synthesizing...")
-        samples, sr = self.engine.synthesize(
-            text, self.settings.voice, self.settings.speed, self.settings.lang
-        )
         self.player.set_volume(self.settings.volume)
-        self.player.play(samples, sr)
-        self.sig_status.emit(f"Crier ({self.engine.backend})")
-        self.sig_ready.emit(True)
+
+        chunks = self.engine.split_into_chunks(text)
+        if not chunks:
+            return
+        started = False
+        for chunk_text, pause_after in chunks:
+            if my_token != self._speak_token:
+                return
+            samples, sr = self.engine.synthesize_chunk(
+                chunk_text, self.settings.voice, self.settings.speed, self.settings.lang, pause_after
+            )
+            if my_token != self._speak_token:
+                return
+            if not started:
+                self.player.play(samples, sr, streaming=True)
+                self.sig_status.emit(f"Crier ({self.engine.backend})")
+                self.sig_ready.emit(True)
+                started = True
+            else:
+                self.player.append(samples)
+        self.player.finish_streaming()
 
     # ---------- screen grab -> OCR -> speech ----------
     def on_screen_grab(self):
@@ -198,12 +223,7 @@ class App(QObject):
 
     def _resynth_worker(self):
         try:
-            samples, sr = self.engine.synthesize(
-                self.current_text, self.settings.voice, self.settings.speed, self.settings.lang
-            )
-            self.player.set_volume(self.settings.volume)
-            self.player.play(samples, sr)
-            self.sig_ready.emit(True)
+            self._speak_text(self.current_text)
         except Exception as e:
             self.sig_status.emit(f"Crier - error: {type(e).__name__}")
         finally:
@@ -217,6 +237,7 @@ class App(QObject):
         self.popup.set_playing(not self.player.is_paused())
 
     def on_stop(self):
+        self._speak_token += 1   # abandon any in-flight streaming synthesis
         dur = self.player.duration_seconds()
         self.player.stop()
         self.popup.set_playing(False)

@@ -1,5 +1,6 @@
 """Grab the current selection from any app, and synthesize it with Kokoro."""
 
+import re
 import time
 
 import numpy as np
@@ -8,10 +9,14 @@ from pynput import keyboard
 
 from . import config
 
-_LINE_GAP_SECONDS = 0.35   # silence inserted between lines - see Engine.synthesize()
-
 _kbd = keyboard.Controller()
 COPY_DELAY = 0.12
+
+_SENTENCE_GAP_SECONDS = 0.28   # pause between sentences within the same line
+_LINE_GAP_SECONDS = 0.65       # pause between lines/paragraphs (e.g. a title -> body)
+_FADE_SECONDS = 0.02           # short edge fade on every chunk so splices don't click
+
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 
 
 _MODIFIERS = (
@@ -62,6 +67,20 @@ def grab_selection() -> str:
     return (text or "").strip()
 
 
+def _fade_edges(samples: np.ndarray, sr: int) -> np.ndarray:
+    """A short linear ramp in/out at the very start/end of a chunk. Splicing
+    raw neural-TTS output directly against silence (or another chunk) tends
+    to click, since the waveform rarely crosses zero exactly at the cut."""
+    n = int(_FADE_SECONDS * sr)
+    if n <= 0 or len(samples) < 2 * n:
+        return samples
+    samples = samples.copy()
+    ramp = np.linspace(0.0, 1.0, n, dtype=np.float32)
+    samples[:n] *= ramp
+    samples[-n:] *= ramp[::-1]
+    return samples
+
+
 class Engine:
     """Thin wrapper over kokoro-onnx. CPU by default; optional experimental DirectML."""
 
@@ -96,28 +115,39 @@ class Engine:
         self._kokoro = Kokoro(model, voices)
         self.backend = "cpu"
 
-    def synthesize(self, text: str, voice: str, speed: float, lang: str):
-        """Return (samples: np.float32 mono, sample_rate: int).
-
+    def split_into_chunks(self, text: str):
+        """Break text into small speakable chunks (roughly one sentence
+        each) paired with the silence to insert after each one: a short
+        gap between sentences, a longer one between lines/paragraphs -
         Kokoro's phonemizer treats a bare newline as just whitespace, so a
-        title followed by "\n" and then a paragraph gets no pause at all -
-        it comes out run together as one sentence. Synthesizing each line
-        separately and splicing in real silence between them guarantees an
-        actual pause there, regardless of what the model's prosody would
-        have done with a raw "\n".
-        """
+        title followed by a paragraph would otherwise run together with no
+        pause at all. Small chunks also mean the caller can start playing
+        the first one almost immediately instead of waiting for the whole
+        text to synthesize."""
+        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        chunks = []
+        for li, line in enumerate(lines):
+            sentences = [s.strip() for s in _SENTENCE_SPLIT_RE.split(line) if s.strip()] or [line]
+            for si, sentence in enumerate(sentences):
+                last_in_line = si == len(sentences) - 1
+                last_line = li == len(lines) - 1
+                if last_in_line and last_line:
+                    pause = 0.0
+                elif last_in_line:
+                    pause = _LINE_GAP_SECONDS
+                else:
+                    pause = _SENTENCE_GAP_SECONDS
+                chunks.append((sentence, pause))
+        return chunks
+
+    def synthesize_chunk(self, text: str, voice: str, speed: float, lang: str, pause_after: float = 0.0):
+        """Synthesize one chunk. Returns (samples, sample_rate) with edge
+        fades applied and pause_after seconds of trailing silence."""
         if self._kokoro is None:
             self.load()
-
-        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-        if len(lines) <= 1:
-            return self._kokoro.create(text, voice=voice, speed=speed, lang=lang)
-
-        chunks = []
-        sr = 24000
-        for i, line in enumerate(lines):
-            samples, sr = self._kokoro.create(line, voice=voice, speed=speed, lang=lang)
-            chunks.append(samples)
-            if i < len(lines) - 1:
-                chunks.append(np.zeros(int(_LINE_GAP_SECONDS * sr), dtype=np.float32))
-        return np.concatenate(chunks), sr
+        samples, sr = self._kokoro.create(text, voice=voice, speed=speed, lang=lang)
+        samples = _fade_edges(samples, sr)
+        if pause_after > 0:
+            gap = np.zeros(int(pause_after * sr), dtype=np.float32)
+            samples = np.concatenate([samples, gap])
+        return samples, sr

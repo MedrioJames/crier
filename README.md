@@ -23,7 +23,8 @@ neural voice reads it — all on-device, no cloud, no account.
 - **Single instance** — launching again just pops the controls back up.
 - **Self-updating** — checks the git remote on startup (and on demand), then pulls and
   restarts in place.
-- **Settings** — voice, language, hotkeys, GPU toggle, auto-update, start-at-login.
+- **Settings** — a Voice tab (provider, voice, language, Kokoro's own synthesis speed, GPU
+  toggle) and a General tab (hotkeys, auto-update, start-at-login).
 
 ## Setup
 
@@ -73,11 +74,13 @@ Change them in Settings (tray icon → Settings). Format is pynput style, e.g. `
 
 ## Notes & known rough edges
 
-- **Speed and volume are both applied live**, mid-playback, with no resynthesis. Kokoro
-  synthesizes at whatever speed you've picked (clamped to the 0.5x-2.0x it supports
-  natively); the speed slider goes up to 4.0x by stretching that audio further during
-  playback, and any speed change - even to something already playing - takes effect on
-  the very next audio callback.
+- **Two independent speed controls.** Settings > Voice has Kokoro's own synthesis speed
+  (0.5x-2.0x, its hard limit) - it's a voice-quality setting and changing it doesn't touch
+  anything already playing. The popup's speed control (0.5x-4.0x, in 0.1x steps) is a
+  separate live playback control: it takes whatever Kokoro already produced and stretches
+  or compresses it in real time using a pitch-preserving time-scale algorithm (WSOLA), so
+  fast/slow playback doesn't sound like a chipmunk or a record played too slow. Volume is
+  also applied live. Neither control ever triggers a resynthesis.
 - **GPU (DirectML)** is an experimental toggle. Kokoro currently errors on DirectML
   (a ConvTranspose op issue), so Crier smoke-tests it at load and silently falls back
   to CPU. CPU is real-time for this model anyway.

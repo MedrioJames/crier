@@ -35,12 +35,26 @@ class Settings:
         self._s.setValue("lang", v)
 
     @property
-    def speed(self) -> float:
-        return float(self._s.value("speed", 1.0))
+    def voice_speed(self) -> float:
+        """Kokoro's own synthesis speed (0.5-2.0, its hard limit) - a
+        voice-quality setting, edited in Settings > Voice. Independent of
+        the popup's playback_speed."""
+        return float(self._s.value("voice_speed", 1.0))
 
-    @speed.setter
-    def speed(self, v: float):
-        self._s.setValue("speed", float(v))
+    @voice_speed.setter
+    def voice_speed(self, v: float):
+        self._s.setValue("voice_speed", float(v))
+
+    @property
+    def playback_speed(self) -> float:
+        """The popup's live playback-rate control. Applied by stretching
+        whatever Kokoro already produced (pitch-preserved), never by
+        changing how Kokoro synthesizes - so it can go beyond 2.0x."""
+        return float(self._s.value("playback_speed", 1.0))
+
+    @playback_speed.setter
+    def playback_speed(self, v: float):
+        self._s.setValue("playback_speed", float(v))
 
     @property
     def volume(self) -> float:
@@ -57,6 +71,15 @@ class Settings:
     @use_gpu.setter
     def use_gpu(self, v: bool):
         self._s.setValue("use_gpu", bool(v))
+
+    # --- voice provider (groundwork for future non-Kokoro voice modules) ---
+    @property
+    def voice_provider(self) -> str:
+        return self._s.value("voice_provider", "kokoro", str)
+
+    @voice_provider.setter
+    def voice_provider(self, v: str):
+        self._s.setValue("voice_provider", v)
 
     # --- hotkeys (pynput GlobalHotKeys syntax) ---
     @property

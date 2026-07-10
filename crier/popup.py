@@ -58,7 +58,7 @@ class ControlPopup(QWidget):
         self.setWindowFlags(
             Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
         )
-        self.setAttribute(Qt.WA_TranslucentBackground, False)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setWindowTitle("Crier")
         self._user_moved = False
 

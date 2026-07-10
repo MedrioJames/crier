@@ -37,7 +37,15 @@ class WsolaStretcher:
         audio buffered yet for the next frame - caller should wait for more
         and retry."""
         speed = max(0.1, float(speed))
-        ana_hop = self.syn_hop * speed
+        # At speed>1, a fixed syn_hop makes ana_hop (= syn_hop*speed) exceed
+        # frame_len - the gap between consecutive analysis frames then
+        # skips a chunk of source audio outright (dropped phonemes, not
+        # just distorted prosody). Shrinking the hop keeps every sample
+        # covered by at least one frame regardless of speed; the OLA
+        # accumulator already normalizes by actual window-sum, so a
+        # variable hop reconstructs correctly.
+        syn_hop = min(self.syn_hop, max(1, int(self.frame_len / speed))) if speed > 1.0 else self.syn_hop
+        ana_hop = syn_hop * speed
 
         ideal = int(round(self._ana_pos))
         if ideal + self.frame_len + self.search_range > len(base):
@@ -51,7 +59,7 @@ class WsolaStretcher:
         if self._prev_seg is None:
             best = ideal
         else:
-            overlap_len = self.frame_len - self.syn_hop
+            overlap_len = self.frame_len - syn_hop
             ref = self._prev_seg[-overlap_len:]
             n_cand = hi - lo + 1
             cand_source = base[lo: lo + n_cand + overlap_len - 1]
@@ -62,6 +70,7 @@ class WsolaStretcher:
             scores = dot / (cand_norm * ref_norm)
             best = lo + int(np.argmax(scores))
 
+        self.last_frame_start = best   # exposed for coverage testing/debugging
         frame = base[best: best + self.frame_len] * self.window
         self._prev_seg = frame
 
@@ -75,7 +84,7 @@ class WsolaStretcher:
         self._acc_norm[rel:rel + self.frame_len] += self.window
 
         self._ana_pos += ana_hop
-        self._syn_pos += self.syn_hop
+        self._syn_pos += syn_hop
 
         # Anything more than one frame behind the latest write can never be
         # touched by a future frame again - finalize (normalize) and emit it.

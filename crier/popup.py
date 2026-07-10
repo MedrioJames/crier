@@ -11,7 +11,8 @@ from .hotkey_capture import pretty_hotkey
 from .seek_slider import SeekSlider
 
 _SPEED_MIN = 5     # 0.5x, in tenths
-_SPEED_MAX = 40     # 4.0x, in tenths
+_SPEED_MAX = 30     # 3.0x, in tenths - beyond this, time-compressed speech
+                    # gets hard to follow regardless of stretch algorithm
 
 
 class _DragHandle(QLabel):
@@ -125,7 +126,7 @@ class ControlPopup(QWidget):
         self.seek = SeekSlider()
         root.addWidget(self.seek)
 
-        # Speed - stepped in 0.1x increments (0.5x .. 4.0x) rather than a
+        # Speed - stepped in 0.1x increments (0.5x .. 3.0x) rather than a
         # freely-sliding scale, with +/- buttons at each end for one-click
         # nudges. Internally the slider works in tenths of x (5 == 0.5x).
         root.addWidget(QLabel("Speed"))

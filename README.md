@@ -76,7 +76,7 @@ Change them in Settings (tray icon → Settings). Format is pynput style, e.g. `
 
 - **Two independent speed controls.** Settings > Voice has Kokoro's own synthesis speed
   (0.5x-2.0x, its hard limit) - it's a voice-quality setting and changing it doesn't touch
-  anything already playing. The popup's speed control (0.5x-4.0x, in 0.1x steps) is a
+  anything already playing. The popup's speed control (0.5x-3.0x, in 0.1x steps) is a
   separate live playback control: it takes whatever Kokoro already produced and stretches
   or compresses it in real time using a pitch-preserving time-scale algorithm (WSOLA), so
   fast/slow playback doesn't sound like a chipmunk or a record played too slow. Volume is

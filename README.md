@@ -30,11 +30,19 @@ machines won't let you override.
 Use **Python 3.10–3.12** (Kokoro's dependencies don't ship 3.13 wheels yet).
 
 ```bash
-py -3.12 -m venv .venv
-.venv\Scripts\activate
+py -3.12 -m venv "%LOCALAPPDATA%\Crier\venv"
+"%LOCALAPPDATA%\Crier\venv\Scripts\activate"
 pip install -r requirements.txt
 python -m crier
 ```
+
+**Put the venv under `%LOCALAPPDATA%`, not inside the repo**, if the repo itself lives
+under a synced folder (Google Drive Desktop, OneDrive, etc.) - keeps Python's own imports
+and native DLLs (onnxruntime, PySide6, ...) off that sync client's radar, which otherwise
+can add real latency to every file access. [run-crier.bat](run-crier.bat) and
+[run-crier-hidden.vbs](run-crier-hidden.vbs) already point at
+`%LOCALAPPDATA%\Crier\venv`; if you'd rather use a plain `.venv` inside the repo, update
+those two scripts to match.
 
 On first run, Crier downloads the Kokoro model (~330 MB) into
 `%LOCALAPPDATA%\Crier\models`. That's the only network step, and it's a one-time thing.
@@ -76,10 +84,11 @@ Change them in Settings (tray icon → Settings). Format is pynput style, e.g. `
 - **Updating requires `git` on PATH** and a clean fast-forward from `origin/main` -
   if you've made local edits that conflict, `git pull --ff-only` will fail and the
   update dialog reports it rather than clobbering your changes.
-- **Synthesis isn't streamed** — Kokoro generates the entire audio clip before playback
-  starts, so longer selections have a longer wait up front. The screen-grab/OCR step
-  itself is fast (tens of milliseconds); this delay is purely the TTS step and affects
-  both Read Selection and Screen Grab equally.
+- **First read/grab of each session pays a one-time model-load cost** (a couple of
+  seconds), which `App.start()` pays proactively in the background right after launch
+  rather than on your first Read Selection. After that, synthesis is chunked and
+  streamed - playback starts on the first sentence or two while the rest keeps
+  synthesizing in the background, rather than waiting for the whole selection.
 
 ## License
 

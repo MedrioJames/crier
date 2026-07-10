@@ -85,7 +85,7 @@ class Settings:
 
     @property
     def hotkey_smart(self) -> str:
-        return self._s.value("hotkey_smart", "<ctrl>+<alt>+a", str)
+        return self._s.value("hotkey_smart", "<ctrl>+<alt>+<space>", str)
 
     @hotkey_smart.setter
     def hotkey_smart(self, v: str):

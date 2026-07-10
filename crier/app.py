@@ -47,8 +47,7 @@ class App(QObject):
 
         self.tray = Tray()
         self.popup = ControlPopup(
-            self.settings.speed, self.settings.volume,
-            self.settings.hotkey_read, self.settings.hotkey_grab,
+            self.settings.speed, self.settings.volume, self.settings.hotkey_smart,
         )
         self._popup_hwnd = int(self.popup.winId())  # cached: winId() isn't safe to call off the GUI thread
         self.updater = Updater(self.popup)
@@ -89,8 +88,7 @@ class App(QObject):
         self.popup.play_pause.connect(self.on_play_pause)
         self.popup.stop.connect(self.on_stop)
         self.popup.reread.connect(self._resynth_current)
-        self.popup.read_selection.connect(self.on_read)
-        self.popup.screen_grab.connect(self.on_screen_grab)
+        self.popup.smart.connect(self.on_smart)
         self.popup.open_settings.connect(self.open_settings)
         self.popup.quit_app.connect(self.quit)
         self.popup.volume_changed.connect(self.on_volume)
@@ -354,8 +352,7 @@ class App(QObject):
                 self.settings.hotkey_read, self.settings.hotkey_stop,
                 self.settings.hotkey_grab, self.settings.hotkey_smart,
             )
-            self.popup.set_hotkey_hint(self.settings.hotkey_read)
-            self.popup.set_grab_hotkey_hint(self.settings.hotkey_grab)
+            self.popup.set_smart_hotkey_hint(self.settings.hotkey_smart)
             set_autostart(self.settings.autostart)
             if self.settings.use_gpu != old_gpu:
                 self.engine = Engine(use_gpu=self.settings.use_gpu)

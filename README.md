@@ -30,19 +30,11 @@ machines won't let you override.
 Use **Python 3.10–3.12** (Kokoro's dependencies don't ship 3.13 wheels yet).
 
 ```bash
-py -3.12 -m venv "%LOCALAPPDATA%\Crier\venv"
-"%LOCALAPPDATA%\Crier\venv\Scripts\activate"
+py -3.12 -m venv .venv
+.venv\Scripts\activate
 pip install -r requirements.txt
 python -m crier
 ```
-
-**Put the venv under `%LOCALAPPDATA%`, not inside the repo**, if the repo itself lives
-under a synced folder (Google Drive Desktop, OneDrive, etc.) - keeps Python's own imports
-and native DLLs (onnxruntime, PySide6, ...) off that sync client's radar, which otherwise
-can add real latency to every file access. [run-crier.bat](run-crier.bat) and
-[run-crier-hidden.vbs](run-crier-hidden.vbs) already point at
-`%LOCALAPPDATA%\Crier\venv`; if you'd rather use a plain `.venv` inside the repo, update
-those two scripts to match.
 
 On first run, Crier downloads the Kokoro model (~330 MB) into
 `%LOCALAPPDATA%\Crier\models`. That's the only network step, and it's a one-time thing.

@@ -69,7 +69,7 @@ class Settings:
 
     @property
     def hotkey_stop(self) -> str:
-        return self._s.value("hotkey_stop", "<ctrl>+<alt>+s", str)
+        return self._s.value("hotkey_stop", "<ctrl>+<alt>+x", str)
 
     @hotkey_stop.setter
     def hotkey_stop(self, v: str):
@@ -77,7 +77,7 @@ class Settings:
 
     @property
     def hotkey_grab(self) -> str:
-        return self._s.value("hotkey_grab", "<ctrl>+<alt>+g", str)
+        return self._s.value("hotkey_grab", "<ctrl>+<alt>+c", str)
 
     @hotkey_grab.setter
     def hotkey_grab(self, v: str):
@@ -85,7 +85,7 @@ class Settings:
 
     @property
     def hotkey_smart(self) -> str:
-        return self._s.value("hotkey_smart", "<ctrl>+<alt>+<space>", str)
+        return self._s.value("hotkey_smart", "<ctrl>+<alt>+s", str)
 
     @hotkey_smart.setter
     def hotkey_smart(self, v: str):

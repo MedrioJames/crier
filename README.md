@@ -9,10 +9,11 @@ neural voice reads it — all on-device, no cloud, no account.
 ## Features
 
 - **Read anywhere** — select text in any app, press `Ctrl+Alt+R`.
-- **Screen grab → speech** — press `Ctrl+Alt+G`, drag a box around any on-screen text (even
+- **Screen grab → speech** — press `Ctrl+Alt+C`, drag a box around any on-screen text (even
   text you can't select, like images or disabled-selection web pages), and Crier reads it
-  aloud. Uses Windows' built-in OCR engine - no model download, no extra install.
-- **Smart hotkey** — press `Ctrl+Alt+Space` and Crier figures out which of the above you meant:
+  aloud. Uses Windows' built-in OCR engine - no model download, no extra install. Press
+  `Escape` at any point to back out without capturing anything.
+- **Smart hotkey** — press `Ctrl+Alt+S` and Crier figures out which of the above you meant:
   reads the selection if there is one, otherwise starts a screen grab.
 - **Quick controls popup** — one combined "Read / Screen Grab" button, icon transport
   buttons, a click/drag seek bar, speed, and volume, docked in a screen corner (or
@@ -64,9 +65,9 @@ to sign, nothing for SmartScreen to block.
 | Action | Shortcut |
 |---|---|
 | Read selection | `Ctrl+Alt+R` |
-| Stop | `Ctrl+Alt+S` |
-| Screen grab → speech | `Ctrl+Alt+G` |
-| Smart (selection, else screen grab) | `Ctrl+Alt+Space` |
+| Stop | `Ctrl+Alt+X` |
+| Screen grab → speech | `Ctrl+Alt+C` |
+| Smart (selection, else screen grab) | `Ctrl+Alt+S` |
 
 Change them in Settings (tray icon → Settings). Format is pynput style, e.g. `<ctrl>+<alt>+r`.
 

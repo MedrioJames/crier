@@ -6,6 +6,8 @@ from PySide6.QtCore import Qt, QRect, QRectF, QPoint, Signal
 from PySide6.QtGui import QGuiApplication, QPainter, QPainterPath, QColor, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 
+from . import winfocus
+
 _MIN_SIZE = 6  # px; smaller than this on release counts as "clicked, not dragged"
 
 
@@ -53,6 +55,12 @@ class RegionSelectOverlay(QWidget):
         self.raise_()
         self.activateWindow()
         self.setFocus(Qt.OtherFocusReason)
+        # Plain activateWindow()/setFocus() don't reliably win OS-level
+        # keyboard focus when this overlay is raised from a global hotkey
+        # (Windows restricts foreground-stealing) - without this, Escape
+        # keeps going to whatever window was focused before the grab, so
+        # it silently fails to cancel.
+        winfocus.set_foreground(int(self.winId()))
 
     def paintEvent(self, event):
         painter = QPainter(self)

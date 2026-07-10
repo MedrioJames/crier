@@ -2,10 +2,13 @@
 
 import time
 
+import numpy as np
 import pyperclip
 from pynput import keyboard
 
 from . import config
+
+_LINE_GAP_SECONDS = 0.35   # silence inserted between lines - see Engine.synthesize()
 
 _kbd = keyboard.Controller()
 COPY_DELAY = 0.12
@@ -94,7 +97,27 @@ class Engine:
         self.backend = "cpu"
 
     def synthesize(self, text: str, voice: str, speed: float, lang: str):
-        """Return (samples: np.float32 mono, sample_rate: int)."""
+        """Return (samples: np.float32 mono, sample_rate: int).
+
+        Kokoro's phonemizer treats a bare newline as just whitespace, so a
+        title followed by "\n" and then a paragraph gets no pause at all -
+        it comes out run together as one sentence. Synthesizing each line
+        separately and splicing in real silence between them guarantees an
+        actual pause there, regardless of what the model's prosody would
+        have done with a raw "\n".
+        """
         if self._kokoro is None:
             self.load()
-        return self._kokoro.create(text, voice=voice, speed=speed, lang=lang)
+
+        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        if len(lines) <= 1:
+            return self._kokoro.create(text, voice=voice, speed=speed, lang=lang)
+
+        chunks = []
+        sr = 24000
+        for i, line in enumerate(lines):
+            samples, sr = self._kokoro.create(line, voice=voice, speed=speed, lang=lang)
+            chunks.append(samples)
+            if i < len(lines) - 1:
+                chunks.append(np.zeros(int(_LINE_GAP_SECONDS * sr), dtype=np.float32))
+        return np.concatenate(chunks), sr

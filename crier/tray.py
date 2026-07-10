@@ -32,6 +32,7 @@ class Tray(QObject):
     open_settings = Signal()
     check_updates = Signal()
     screen_grab = Signal()
+    smart_action = Signal()
     quit_app = Signal()
 
     def __init__(self, parent=None):
@@ -44,16 +45,18 @@ class Tray(QObject):
 
         menu = QMenu()
         act_show = QAction("Show controls", menu)
+        act_smart = QAction("Smart read/grab", menu)
         act_grab = QAction("Screen grab -> speech", menu)
         act_settings = QAction("Settings...", menu)
         act_update = QAction("Check for updates", menu)
         act_quit = QAction("Quit Crier", menu)
-        for a in (act_show, act_grab, act_settings, act_update):
+        for a in (act_show, act_smart, act_grab, act_settings, act_update):
             menu.addAction(a)
         menu.addSeparator()
         menu.addAction(act_quit)
 
         act_show.triggered.connect(self.show_controls.emit)
+        act_smart.triggered.connect(self.smart_action.emit)
         act_grab.triggered.connect(self.screen_grab.emit)
         act_settings.triggered.connect(self.open_settings.emit)
         act_update.triggered.connect(self.check_updates.emit)

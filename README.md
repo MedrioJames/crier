@@ -12,6 +12,8 @@ neural voice reads it — all on-device, no cloud, no account.
 - **Screen grab → speech** — press `Ctrl+Alt+G`, drag a box around any on-screen text (even
   text you can't select, like images or disabled-selection web pages), and Crier reads it
   aloud. Uses Windows' built-in OCR engine - no model download, no extra install.
+- **Smart hotkey** — press `Ctrl+Alt+A` and Crier figures out which of the above you meant:
+  reads the selection if there is one, otherwise starts a screen grab.
 - **Quick controls popup** — icon transport buttons, a click/drag seek bar, speed, and
   volume, docked in a screen corner (or wherever you drag it).
 - **Tray icon** — show the controls, screen grab, open settings, check for updates, or quit.
@@ -63,6 +65,7 @@ to sign, nothing for SmartScreen to block.
 | Read selection | `Ctrl+Alt+R` |
 | Stop | `Ctrl+Alt+S` |
 | Screen grab → speech | `Ctrl+Alt+G` |
+| Smart (selection, else screen grab) | `Ctrl+Alt+A` |
 
 Change them in Settings (tray icon → Settings). Format is pynput style, e.g. `<ctrl>+<alt>+r`.
 

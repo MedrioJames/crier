@@ -83,6 +83,14 @@ class Settings:
     def hotkey_grab(self, v: str):
         self._s.setValue("hotkey_grab", v)
 
+    @property
+    def hotkey_smart(self) -> str:
+        return self._s.value("hotkey_smart", "<ctrl>+<alt>+a", str)
+
+    @hotkey_smart.setter
+    def hotkey_smart(self, v: str):
+        self._s.setValue("hotkey_smart", v)
+
     # --- behaviour ---
     @property
     def auto_update(self) -> bool:

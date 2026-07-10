@@ -29,6 +29,7 @@ class App(QObject):
     sig_status = Signal(str)
     sig_ready = Signal(bool)          # True once audio is playing
     sig_show_popup = Signal()         # emitted from the read worker thread
+    sig_start_screen_grab = Signal()  # emitted from the smart-hotkey worker thread
 
     def __init__(self, qapp: QApplication):
         super().__init__()
@@ -52,7 +53,8 @@ class App(QObject):
         self._popup_hwnd = int(self.popup.winId())  # cached: winId() isn't safe to call off the GUI thread
         self.updater = Updater(self.popup)
         self.hotkeys = HotkeyManager(
-            self.settings.hotkey_read, self.settings.hotkey_stop, self.settings.hotkey_grab
+            self.settings.hotkey_read, self.settings.hotkey_stop,
+            self.settings.hotkey_grab, self.settings.hotkey_smart,
         )
 
         # speed re-synth debounce
@@ -75,11 +77,13 @@ class App(QObject):
         self.hotkeys.read_triggered.connect(self.on_read, Qt.QueuedConnection)
         self.hotkeys.stop_triggered.connect(self.on_stop, Qt.QueuedConnection)
         self.hotkeys.grab_triggered.connect(self.on_screen_grab, Qt.QueuedConnection)
+        self.hotkeys.smart_triggered.connect(self.on_smart, Qt.QueuedConnection)
 
         self.tray.show_controls.connect(self.show_controls)
         self.tray.open_settings.connect(self.open_settings)
         self.tray.check_updates.connect(lambda: self.updater.check(silent=False))
         self.tray.screen_grab.connect(self.on_screen_grab)
+        self.tray.smart_action.connect(self.on_smart)
         self.tray.quit_app.connect(self.quit)
 
         self.popup.play_pause.connect(self.on_play_pause)
@@ -101,6 +105,7 @@ class App(QObject):
         self.sig_status.connect(self.popup.set_status, Qt.QueuedConnection)
         self.sig_ready.connect(self.popup.set_playing, Qt.QueuedConnection)
         self.sig_show_popup.connect(self.popup.show_popup, Qt.QueuedConnection)
+        self.sig_start_screen_grab.connect(self.on_screen_grab, Qt.QueuedConnection)
 
     def start(self):
         # Show the popup - with an explicit loading message - before
@@ -170,6 +175,40 @@ class App(QObject):
                 self.sig_status.emit("Crier - nothing selected")
                 return
             self._speak_text(text)
+        except Exception as e:
+            self.sig_status.emit(f"Crier - error: {type(e).__name__}")
+        finally:
+            self._busy = False
+
+    # ---------- smart hotkey: selection if there is one, else screen grab ----------
+    def on_smart(self):
+        self._remember_foreground()
+        if self._busy:
+            self.popup.show_popup()
+            return
+        self._busy = True
+        threading.Thread(target=self._smart_worker, daemon=True).start()
+
+    def _smart_worker(self):
+        try:
+            if winfocus.get_foreground() == self._popup_hwnd:
+                winfocus.set_foreground(self._last_external_hwnd)
+                time.sleep(0.08)
+
+            text = grab_selection()
+            if text:
+                self.sig_show_popup.emit()
+                self._speak_text(text)
+                return
+
+            # Nothing selected - hand off to screen grab instead of just
+            # reporting "nothing selected". on_screen_grab() creates a
+            # QWidget (the overlay) and must run on the GUI thread, and it
+            # has its own busy-guard, so release ours first.
+            self.sig_status.emit("Crier - nothing selected, starting screen grab...")
+            self._busy = False
+            self.sig_start_screen_grab.emit()
+            return
         except Exception as e:
             self.sig_status.emit(f"Crier - error: {type(e).__name__}")
         finally:
@@ -312,7 +351,8 @@ class App(QObject):
             old_gpu = self.settings.use_gpu
             dlg.apply_to_settings()
             self.hotkeys.rebind(
-                self.settings.hotkey_read, self.settings.hotkey_stop, self.settings.hotkey_grab
+                self.settings.hotkey_read, self.settings.hotkey_stop,
+                self.settings.hotkey_grab, self.settings.hotkey_smart,
             )
             self.popup.set_hotkey_hint(self.settings.hotkey_read)
             self.popup.set_grab_hotkey_hint(self.settings.hotkey_grab)

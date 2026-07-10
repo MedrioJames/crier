@@ -60,6 +60,13 @@ class SettingsDialog(QDialog):
         self.hotkey_grab = HotkeyEdit(settings.hotkey_grab)
         form.addRow("Screen grab hotkey", self.hotkey_grab)
 
+        self.hotkey_smart = HotkeyEdit(settings.hotkey_smart)
+        form.addRow("Smart hotkey", self.hotkey_smart)
+        smart_hint = QLabel("Smart hotkey reads the selection if there is one, otherwise starts a screen grab.")
+        smart_hint.setWordWrap(True)
+        smart_hint.setStyleSheet("color: #888; font-size: 11px;")
+        form.addRow("", smart_hint)
+
         self.use_gpu = QCheckBox("Try GPU (DirectML - experimental, falls back to CPU)")
         self.use_gpu.setChecked(settings.use_gpu)
         form.addRow("", self.use_gpu)
@@ -87,6 +94,7 @@ class SettingsDialog(QDialog):
         self.settings.hotkey_read = self.hotkey_read.value()
         self.settings.hotkey_stop = self.hotkey_stop.value()
         self.settings.hotkey_grab = self.hotkey_grab.value()
+        self.settings.hotkey_smart = self.hotkey_smart.value()
         self.settings.use_gpu = self.use_gpu.isChecked()
         self.settings.auto_update = self.auto_update.isChecked()
         self.settings.autostart = self.autostart.isChecked()

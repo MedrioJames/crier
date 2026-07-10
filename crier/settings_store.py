@@ -17,39 +17,86 @@ class Settings:
     def __init__(self):
         self._s = QSettings(config.ORG_NAME, config.APP_NAME)
 
-    # --- voice / audio ---
+    # --- Kokoro provider settings (namespaced so other providers' settings
+    # never collide with these; falls back to the old un-namespaced key so
+    # existing installs don't lose their current voice/lang/speed/GPU choice) ---
     @property
-    def voice(self) -> str:
-        return self._s.value("voice", "af_heart", str)
+    def kokoro_voice(self) -> str:
+        return self._s.value("kokoro_voice", self._s.value("voice", "af_heart", str), str)
 
-    @voice.setter
-    def voice(self, v: str):
-        self._s.setValue("voice", v)
-
-    @property
-    def lang(self) -> str:
-        return self._s.value("lang", "en-us", str)
-
-    @lang.setter
-    def lang(self, v: str):
-        self._s.setValue("lang", v)
+    @kokoro_voice.setter
+    def kokoro_voice(self, v: str):
+        self._s.setValue("kokoro_voice", v)
 
     @property
-    def voice_speed(self) -> float:
+    def kokoro_lang(self) -> str:
+        return self._s.value("kokoro_lang", self._s.value("lang", "en-us", str), str)
+
+    @kokoro_lang.setter
+    def kokoro_lang(self, v: str):
+        self._s.setValue("kokoro_lang", v)
+
+    @property
+    def kokoro_voice_speed(self) -> float:
         """Kokoro's own synthesis speed (0.5-2.0, its hard limit) - a
         voice-quality setting, edited in Settings > Voice. Independent of
         the popup's playback_speed."""
-        return float(self._s.value("voice_speed", 1.0))
+        return float(self._s.value("kokoro_voice_speed", self._s.value("voice_speed", 1.0)))
 
-    @voice_speed.setter
-    def voice_speed(self, v: float):
-        self._s.setValue("voice_speed", float(v))
+    @kokoro_voice_speed.setter
+    def kokoro_voice_speed(self, v: float):
+        self._s.setValue("kokoro_voice_speed", float(v))
 
+    @property
+    def kokoro_use_gpu(self) -> bool:
+        return _b(self._s.value("kokoro_use_gpu", self._s.value("use_gpu", False)), False)
+
+    @kokoro_use_gpu.setter
+    def kokoro_use_gpu(self, v: bool):
+        self._s.setValue("kokoro_use_gpu", bool(v))
+
+    # --- OpenAI provider settings ---
+    @property
+    def openai_api_key(self) -> str:
+        return self._s.value("openai_api_key", "", str)
+
+    @openai_api_key.setter
+    def openai_api_key(self, v: str):
+        self._s.setValue("openai_api_key", v)
+
+    @property
+    def openai_voice(self) -> str:
+        return self._s.value("openai_voice", "alloy", str)
+
+    @openai_voice.setter
+    def openai_voice(self, v: str):
+        self._s.setValue("openai_voice", v)
+
+    @property
+    def openai_tone(self) -> str:
+        """Free-text style/tone instructions (gpt-4o-mini-tts's `instructions`
+        field), e.g. "calm and professional". Empty means default tone."""
+        return self._s.value("openai_tone", "", str)
+
+    @openai_tone.setter
+    def openai_tone(self, v: str):
+        self._s.setValue("openai_tone", v)
+
+    @property
+    def openai_speed(self) -> float:
+        return float(self._s.value("openai_speed", 1.0))
+
+    @openai_speed.setter
+    def openai_speed(self, v: float):
+        self._s.setValue("openai_speed", float(v))
+
+    # --- playback (popup control, applies uniformly to any provider) ---
     @property
     def playback_speed(self) -> float:
         """The popup's live playback-rate control. Applied by stretching
-        whatever Kokoro already produced (pitch-preserved), never by
-        changing how Kokoro synthesizes - so it can go beyond 2.0x."""
+        whatever audio the active voice provider already produced
+        (pitch-preserved), never by changing how that provider synthesizes -
+        so it can go beyond whatever speed range that provider supports."""
         return float(self._s.value("playback_speed", 1.0))
 
     @playback_speed.setter
@@ -64,15 +111,7 @@ class Settings:
     def volume(self, v: float):
         self._s.setValue("volume", float(v))
 
-    @property
-    def use_gpu(self) -> bool:
-        return _b(self._s.value("use_gpu", False), False)
-
-    @use_gpu.setter
-    def use_gpu(self, v: bool):
-        self._s.setValue("use_gpu", bool(v))
-
-    # --- voice provider (groundwork for future non-Kokoro voice modules) ---
+    # --- active voice provider ---
     @property
     def voice_provider(self) -> str:
         return self._s.value("voice_provider", "kokoro", str)

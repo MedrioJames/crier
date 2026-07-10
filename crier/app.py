@@ -11,7 +11,9 @@ from . import config
 from .settings_store import Settings
 from .single_instance import SingleInstance
 from .hotkey import HotkeyManager
-from .engine import Engine, grab_selection
+from .providers import get_provider
+from .selection import grab_selection
+from .chunking import split_into_chunks
 from .player import Player
 from .popup import ControlPopup
 from .tray import Tray
@@ -35,7 +37,7 @@ class App(QObject):
         super().__init__()
         self.qapp = qapp
         self.settings = Settings()
-        self.engine = Engine(use_gpu=self.settings.use_gpu)
+        self.engine = get_provider(self.settings.voice_provider).Engine(self.settings)
         self.player = Player()
         self.player.set_volume(self.settings.volume)
 
@@ -121,12 +123,14 @@ class App(QObject):
             QTimer.singleShot(2500, lambda: self.updater.check(silent=True))
 
     def _warm_up_engine(self):
-        # Loading the model + Kokoro's first-call phonemizer warm-up takes
-        # a couple of seconds; do it now in the background so it isn't the
+        # For Kokoro, this is model-load + the first-call phonemizer warm-up
+        # (a couple of seconds); do it now in the background so it isn't the
         # user's very first Read Selection that pays for it, and tell them
         # once it's actually ready instead of leaving the loading message up.
+        # Cloud providers just get a quick config check (e.g. is an API key
+        # set) since there's no local model to warm up.
         try:
-            self.engine.load(self.settings.voice, max(0.5, min(2.0, self.settings.voice_speed)), self.settings.lang)
+            self.engine.load()
             self.sig_status.emit(
                 f"Crier ready ({self.engine.backend}) - select text anywhere, then use the hotkey or this button."
             )
@@ -220,18 +224,14 @@ class App(QObject):
         self.sig_status.emit("Crier - synthesizing...")
         self.player.set_volume(self.settings.volume)
 
-        chunks = self.engine.split_into_chunks(text)
+        chunks = split_into_chunks(text)
         if not chunks:
             return
-        # Kokoro's own hard limit, independent of the popup's playback speed.
-        voice_speed = max(0.5, min(2.0, self.settings.voice_speed))
         started = False
         for chunk_text, pause_after in chunks:
             if my_token != self._speak_token:
                 return
-            samples, sr = self.engine.synthesize_chunk(
-                chunk_text, self.settings.voice, voice_speed, self.settings.lang, pause_after
-            )
+            samples, sr = self.engine.synthesize_chunk(chunk_text, pause_after)
             if my_token != self._speak_token:
                 return
             if not started:
@@ -343,7 +343,8 @@ class App(QObject):
         self.hotkeys.stop()
         dlg = SettingsDialog(self.settings, self.popup)
         if dlg.exec():
-            old_gpu = self.settings.use_gpu
+            old_provider = self.settings.voice_provider
+            old_gpu = self.settings.kokoro_use_gpu
             dlg.apply_to_settings()
             self.hotkeys.rebind(
                 self.settings.hotkey_read, self.settings.hotkey_stop,
@@ -351,9 +352,9 @@ class App(QObject):
             )
             self.popup.set_smart_hotkey_hint(self.settings.hotkey_smart)
             set_autostart(self.settings.autostart)
-            if self.settings.use_gpu != old_gpu:
-                self.engine = Engine(use_gpu=self.settings.use_gpu)
-                self.popup.set_status("Crier is reloading the voice model, please wait...")
+            if self.settings.voice_provider != old_provider or self.settings.kokoro_use_gpu != old_gpu:
+                self.engine = get_provider(self.settings.voice_provider).Engine(self.settings)
+                self.popup.set_status("Crier is reloading the voice engine, please wait...")
                 threading.Thread(target=self._warm_up_engine, daemon=True).start()  # warm it up now, not on next read
         else:
             self.hotkeys.start()  # nothing changed - restore the still-current hotkeys
@@ -377,8 +378,10 @@ def main():
         return 0
     single.start_server()
 
-    # First-run model download (blocks with a progress dialog until done).
-    if not models.ensure_models():
+    # First-run model download (blocks with a progress dialog until done) -
+    # only if Kokoro is the active provider; cloud providers have nothing
+    # local to download.
+    if Settings().voice_provider == "kokoro" and not models.ensure_models():
         return 1
 
     app = App(qapp)

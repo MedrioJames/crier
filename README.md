@@ -23,8 +23,12 @@ neural voice reads it — all on-device, no cloud, no account.
 - **Single instance** — launching again just pops the controls back up.
 - **Self-updating** — checks the git remote on startup (and on demand), then pulls and
   restarts in place.
-- **Settings** — a Voice tab (provider, voice, language, Kokoro's own synthesis speed, GPU
-  toggle) and a General tab (hotkeys, auto-update, start-at-login).
+- **Pluggable voice providers** — Settings > Voice has a provider dropdown. Kokoro (local,
+  offline, free) is the default; OpenAI (cloud, paid, needs your own API key) is also
+  built in. Each provider gets its own settings panel (API key, voice, tone, etc.) that
+  only shows up when it's selected.
+- **Settings** — a Voice tab (provider + that provider's own settings) and a General tab
+  (hotkeys, auto-update, start-at-login).
 
 ## Setup
 
@@ -54,6 +58,34 @@ On first run, Crier downloads the Kokoro model (~330 MB) into
 Both launch through `pythonw.exe` (no console window), which is also why they're not
 subject to the same SmartScreen check a downloaded `.exe` would be.
 
+## Voice providers
+
+Crier's TTS backend is pluggable - `crier/providers/` has one module per provider,
+each exposing an `Engine` (does the actual synthesis) and a `SettingsPanel` (the fields
+Settings > Voice shows when that provider is selected). To add another one (ElevenLabs,
+Azure, whatever), drop a new module in there implementing the same shape and register it
+in `crier/providers/__init__.py` - nothing else needs to change.
+
+- **Kokoro** (default) - runs locally on your CPU, fully offline, no account or cost.
+- **OpenAI** (`gpt-4o-mini-tts`) - cloud-based, needs your own API key from
+  [platform.openai.com](https://platform.openai.com/api-keys), and bills your OpenAI
+  account per character synthesized. Chosen over ElevenLabs mainly on cost - OpenAI's
+  per-character API pricing is meaningfully cheaper for this kind of casual/occasional
+  reading use, though ElevenLabs is often considered to have an edge on voice
+  expressiveness. Supports a free-text "tone" field (e.g. "calm and professional") that
+  OpenAI's model uses to steer delivery style - Kokoro has no equivalent since Kokoro's
+  API only exposes voice/speed/language as tunables.
+
+Switching providers in Settings takes effect on your next read (it doesn't hot-swap
+mid-playback). The popup's own speed/volume controls apply to whichever provider is
+active, unchanged.
+
+**Caveat:** the OpenAI integration is built from documented API behavior, not tested
+against a live key (this project doesn't have one) - the model name, `instructions`
+(tone) parameter, and `response_format="pcm"` handling are all this build's best current
+understanding. If something errors or sounds off, the returned message should say why;
+worth double-checking against OpenAI's current docs if so.
+
 ## Updating
 
 The tray menu's "Check for updates" (and the auto-update-on-startup setting) run
@@ -74,13 +106,15 @@ Change them in Settings (tray icon → Settings). Format is pynput style, e.g. `
 
 ## Notes & known rough edges
 
-- **Two independent speed controls.** Settings > Voice has Kokoro's own synthesis speed
-  (0.5x-2.0x, its hard limit) - it's a voice-quality setting and changing it doesn't touch
-  anything already playing. The popup's speed control (0.5x-3.0x, in 0.1x steps) is a
-  separate live playback control: it takes whatever Kokoro already produced and stretches
-  or compresses it in real time using a pitch-preserving time-scale algorithm (WSOLA), so
-  fast/slow playback doesn't sound like a chipmunk or a record played too slow. Volume is
-  also applied live. Neither control ever triggers a resynthesis.
+- **Two independent speed controls.** Settings > Voice has the active provider's own
+  synthesis speed (Kokoro: 0.5x-2.0x, its hard limit) - a voice-quality setting that
+  doesn't touch anything already playing. The popup's speed control (0.5x-3.0x, in 0.1x
+  steps) is a separate live playback control: it takes whatever the provider already
+  produced and stretches or compresses it in real time using a pitch-preserving
+  time-scale algorithm (WSOLA), so fast/slow playback doesn't sound like a chipmunk or a
+  record played too slow. Volume is also applied live. Neither control ever triggers a
+  resynthesis. Past ~3x, though, any time-scale algorithm runs into a fundamental
+  intelligibility floor regardless of tuning - that's why the popup caps there.
 - **GPU (DirectML)** is an experimental toggle. Kokoro currently errors on DirectML
   (a ConvTranspose op issue), so Crier smoke-tests it at load and silently falls back
   to CPU. CPU is real-time for this model anyway.
